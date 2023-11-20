@@ -1,0 +1,5 @@
+./dm4reader
+./nornir-shared
+./nornir-pools
+./nornir-imageregistration
+./nornir-buildmanager

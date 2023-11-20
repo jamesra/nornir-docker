@@ -1,0 +1,1 @@
+docker build nornir_cupy -t nornir_cupy --pull 
