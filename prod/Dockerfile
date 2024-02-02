@@ -66,11 +66,11 @@ WORKDIR /usr/src/app/nornir
 #################################################################################################
 # This is a development environment. Map these folders to the source code on the host machine.
 # For production environments that pull this image, install these packages from git or pip.
-#RUN git clone -b dev https://github.com/jamesra/nornir-shared
-#RUN git clone -b dev https://github.com/jamesra/nornir-pools
-#RUN git clone https://github.com/jamesra/dm4reader
-#RUN git clone -b dev https://github.com/jamesra/nornir-imageregistration
-#RUN git clone -b dev https://github.com/jamesra/nornir-buildmanager
+RUN git clone -b dev https://github.com/jamesra/nornir-shared
+RUN git clone -b dev https://github.com/jamesra/nornir-pools
+RUN git clone https://github.com/jamesra/dm4reader
+RUN git clone -b dev https://github.com/jamesra/nornir-imageregistration
+RUN git clone -b dev https://github.com/jamesra/nornir-buildmanager
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
