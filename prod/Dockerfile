@@ -54,8 +54,7 @@ RUN make -j
 RUN make install
 RUN ldconfig /usr/local/lib/
 
-WORKDIR /usr/src
-RUN rm -rf ImageMagick
+WORKDIR /usr/src 
 
 #################################################################################################
 # Create a folder for nornir source

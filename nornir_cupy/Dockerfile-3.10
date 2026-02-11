@@ -5,22 +5,14 @@ FROM cupy/cupy:latest
 ARG DEBIAN_FRONTEND=noninteractive
 ARG MAGICKVERSION=7.1.1-27
 
-#Fetch add-apt-repository tool
-RUN apt-get update && apt-get install
-
-RUN apt-get install software-properties-common -y
-
-#Add the PPA with later python versions for Ubuntu
-RUN add-apt-repository ppa:deadsnakes/ppa -y
-
 RUN apt-get update
 RUN apt-get upgrade -y
-RUN apt-get install python3.13 python3-pip  -y
+RUN apt-get install python3.10 python3-pip  -y
 RUN pip install --upgrade pip
 RUN apt-get install git -y
 
 #Python 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.13 1
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 RUN update-alternatives --config python
 
 

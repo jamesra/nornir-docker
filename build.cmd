@@ -1,1 +1,1 @@
-docker build nornir_cupy -t nornir_cupy --pull 
+docker build prod -t nornir-test --pull 

@@ -21,7 +21,7 @@ RUN apt-get install -y autoconf pkg-config
 
 
 ###################################################################################################################
-#Update the git key per this blog post: https://github.blog/2023-03-23-we-updated-our-rsa-ssh-host-key/
+#Update the git key per this blog post: https://gitcdhub.blog/2023-03-23-we-updated-our-rsa-ssh-host-key/
 #RUN su
 RUN mkdir -p ~/.ssh
 RUN touch ~/.ssh/known_hosts
