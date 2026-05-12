@@ -1,1 +1,14 @@
 *.bak
+.env
+# docker-build.ps1 invocation-directory overrides (not merged from example.*)
+build.env
+.build.*.env
+.env.build
+.env.build.*
+!.env.build.example
+.env.cursor-worker
+# Co-located templates: committed files are example.<id>.build.env / example.<id>.run.env
+*.build.env
+!**/example*.build.env
+*.run.env
+!**/example*.run.env
