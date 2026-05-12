@@ -1,3 +1,5 @@
+# DEPRECATED: nornir_cupy layout; use `nornir-docker/prod/Dockerfile` with INSTALL_CUPY=1 (image `nornir:cupy`) or `start-sample.ps1`.
+# See https://nornir.github.io/docker/images.html
 $volume = 'RC3'
 $container_name = "nornir-$volume"
 $test_input_path = "C:/src/git/nornir-testdata"

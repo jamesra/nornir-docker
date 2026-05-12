@@ -1,0 +1,64 @@
+# Self-hosted Cursor cloud agent worker: clone strategy fills an empty /workspace on start, then agent worker start.
+#
+# Build order: build the slim base first, then the worker (BASE_IMAGE must exist locally).
+#   docker compose -f nornir-docker/compose.cursor-worker.yaml build nornir-cursor-base nornir-cursor-worker
+#
+# This file uses a single named volume for /workspace (NORNIR_WORKSPACE_STRATEGY defaults to clone).
+# For a unique host folder per run (e.g. under D:\agents), use PowerShell: nornir-docker/start-cursor-worker.ps1.
+#
+# If you bind-mount a host repo at /workspace instead of the named volume, set in .env.cursor-worker:
+#   NORNIR_WORKSPACE_STRATEGY=mounted
+# Optional: NORNIR_SYNC_REMOTE=1 to git pull inside the container.
+#
+# Copy nornir-docker/example.nornir-cursor-worker.run.env to nornir-docker/.env.cursor-worker and set CURSOR_API_KEY (and optional GITHUB_TOKEN). See nornir-docker/README.md.
+#
+# Run:
+#   docker compose -f nornir-docker/compose.cursor-worker.yaml run --rm nornir-cursor-worker
+#
+# GPU (optional):
+#   docker compose -f nornir-docker/compose.cursor-worker.yaml run --rm --gpus all nornir-cursor-worker
+
+include:
+  - path: compose.yaml
+
+services:
+  nornir-cursor-base:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    build:
+      context: ..
+      dockerfile: nornir-docker/dev/Dockerfile
+      args:
+        INSTALL_MONOREPO_EDITABLES: "0"
+        CUPY_PACKAGE: cupy-cuda13x
+        NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        IMAGE_SOURCE: ${IMAGE_SOURCE:-https://github.com/jamesra/nornir}
+        NORNIR_IMAGE_VARIANT: dev-cursor-base
+        IMAGE_TITLE: Nornir cursor worker base
+        IMAGE_DESCRIPTION: Python venv + CuPy + pytest; Nornir packages from /workspace
+    image: nornir:dev-cursor-base
+
+  nornir-cursor-worker:
+    build:
+      context: ..
+      dockerfile: nornir-docker/Dockerfile.cursor-worker
+      args:
+        BASE_IMAGE: nornir:dev-cursor-base
+    image: nornir:cursor-worker
+    env_file:
+      - path: ${NORNIR_CURSOR_WORKER_ENV_FILE:-.env.cursor-worker}
+        required: false
+    volumes:
+      - nornir_cursor_worker_workspace:/workspace
+    stdin_open: true
+    tty: true
+
+volumes:
+  nornir_cursor_worker_workspace:

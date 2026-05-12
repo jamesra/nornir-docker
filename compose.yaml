@@ -1,0 +1,54 @@
+# Build from repository root (parent of nornir-docker):
+#   docker compose -f nornir-docker/compose.yaml build
+#
+# For OCI labels with real VERSION, git SHA, and package BOM JSON, prefer docker-build.ps1
+# or export NORNIR_RELEASE / SOURCE_REVISION / PACKAGE_VERSIONS_JSON before compose build.
+#
+# Run nornir-build with your data directory mounted (example):
+#   docker compose -f nornir-docker/compose.yaml run --rm -v "%CD%:/workspace" -w /workspace nornir nornir-build --help
+
+services:
+  nornir:
+    build:
+      context: ..
+      dockerfile: nornir-docker/dev/Dockerfile
+      args:
+        CUPY_PACKAGE: cupy-cuda13x
+        NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        IMAGE_SOURCE: ${IMAGE_SOURCE:-https://github.com/jamesra/nornir}
+        NORNIR_IMAGE_VARIANT: dev
+        IMAGE_TITLE: Nornir development image
+        IMAGE_DESCRIPTION: Headless Nornir stack with pytest and CuPy for Python 3.14
+    image: nornir:dev
+
+  nornir-prod:
+    build:
+      context: ..
+      dockerfile: nornir-docker/prod/Dockerfile
+      args:
+        NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        IMAGE_SOURCE: ${IMAGE_SOURCE:-https://github.com/jamesra/nornir}
+        NORNIR_IMAGE_VARIANT: prod
+        IMAGE_TITLE: Nornir production image (CPU)
+        IMAGE_DESCRIPTION: Headless Nornir production stack for Python 3.14 without CuPy
+    image: nornir:prod
+
+  nornir-cupy:
+    build:
+      context: ..
+      dockerfile: nornir-docker/prod/Dockerfile
+      args:
+        INSTALL_CUPY: "1"
+        CUPY_PACKAGE: cupy-cuda13x
+        NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
+        SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+        IMAGE_SOURCE: ${IMAGE_SOURCE:-https://github.com/jamesra/nornir}
+        NORNIR_IMAGE_VARIANT: prod-cupy
+        IMAGE_TITLE: Nornir production image (CuPy)
+        IMAGE_DESCRIPTION: Headless Nornir production stack for Python 3.14 with CuPy
+    image: nornir:cupy

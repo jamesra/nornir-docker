@@ -1,3 +1,10 @@
+# DEPRECATED (2026): retained for reference only.
+# Prefer `nornir-docker/prod/Dockerfile` with `--build-arg INSTALL_CUPY=1` (image tag `nornir:cupy`)
+# or `nornir-docker/dev/Dockerfile` for dev/test tooling.
+#
+# This legacy Dockerfile is non-reproducible (`cupy/cupy:latest`), uses PPAs, and contains
+# interactive build steps; it is not maintained.
+#
 #FROM python:3.10.12-bullseye
 #FROM ubuntu:latest
 FROM cupy/cupy:latest

@@ -1,12 +1,14 @@
+# Superseded by ../compose.yaml (builds nornir:dev from the monorepo root).
+# Kept for reference if you relied on Docker Dev Environments defaults.
+
 services:
   app:
     entrypoint:
-    - sleep
-    - infinity
+      - sleep
+      - infinity
     image: docker/dev-environments-default:stable-1
     init: true
     volumes:
-    - type: bind
-      source: /var/run/docker.sock
-      target: /var/run/docker.sock
-
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock

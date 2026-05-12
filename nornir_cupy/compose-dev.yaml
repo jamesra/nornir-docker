@@ -1,12 +1,15 @@
+# DEPRECATED (2026): retained for reference only.
+# Superseded by ../compose.yaml (service nornir-cupy). Prefer `nornir:cupy` built from
+# nornir-docker/prod/Dockerfile with INSTALL_CUPY=1.
+
 services:
   app:
     entrypoint:
-    - sleep
-    - infinity
+      - sleep
+      - infinity
     image: docker/dev-environments-default:stable-1
     init: true
     volumes:
-    - type: bind
-      source: /var/run/docker.sock
-      target: /var/run/docker.sock
-
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock

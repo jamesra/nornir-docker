@@ -1,20 +1,2 @@
-hypothesis>=6.65.2
-matplotlib
-nose>=1.3.7
-numpy
-Pillow
-psutil>=5.9.0
-SciPy
-scikit-image
-scikit-transformers
-Sphinx>=4.5.0
-sphinx-argparse>=0.3.1
-sphinxcontrib-applehelp>=1.0.2
-sphinxcontrib-devhelp>=1.0.2
-sphinxcontrib-htmlhelp>=2.0.0
-sphinxcontrib-httpdomain>=1.8.0
-sphinxcontrib-jsmath>=1.0.1
-sphinxcontrib-qthelp>=1.0.3
-sphinxcontrib-serializinghtml>=1.1.5
-validators
-cupy
+# Obsolete: production + CuPy uses ../prod/Dockerfile with --build-arg INSTALL_CUPY=1.
+# See nornir-docker/README.md.

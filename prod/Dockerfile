@@ -1,84 +1,100 @@
-#FROM python:3.10.12-bullseye
-FROM ubuntu:latest
+# Build from monorepo root:
+#
+# CPU-only production (default):
+#   docker build -f nornir-docker/prod/Dockerfile -t nornir:prod .
+#
+# Production + CuPy (same Dockerfile):
+#   docker build -f nornir-docker/prod/Dockerfile --build-arg INSTALL_CUPY=1 -t nornir:cupy .
+#
+# Optional: --build-arg CUPY_PACKAGE=cupy-cuda12x when INSTALL_CUPY=1
+#
+# Headless Nornir stack (no Pyre). Python 3.14 + ImageMagick 7. No pytest (see dev/Dockerfile).
+
+FROM python:3.14-bookworm
+
+ARG NORNIR_RELEASE=0.0.0-dev
+ARG SOURCE_REVISION=unknown
+ARG BUILD_DATE=unknown
+ARG IMAGE_SOURCE=https://github.com/jamesra/nornir
+ARG NORNIR_IMAGE_VARIANT=prod
+ARG PACKAGE_VERSIONS_JSON_B64=
+ARG IMAGE_TITLE=Nornir production image
+ARG IMAGE_DESCRIPTION=Headless Nornir production stack for Python 3.14
+
+LABEL org.opencontainers.image.title="${IMAGE_TITLE}" \
+      org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
+      org.opencontainers.image.version="${NORNIR_RELEASE}" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="${IMAGE_SOURCE}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.licenses="LicenseRef-Nornir-See-Repository" \
+      org.nornir.variant="${NORNIR_IMAGE_VARIANT}" \
+      org.nornir.package_versions.json.base64="${PACKAGE_VERSIONS_JSON_B64}"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG MAGICKVERSION=7.1.1-27
+ARG INSTALL_CUPY=0
+ARG CUPY_PACKAGE=cupy-cuda13x
 
-RUN apt-get update
-RUN apt-get upgrade -y
-RUN apt-get install python3.10 python3-pip  -y
-RUN pip install --upgrade pip
-RUN apt-get install git -y
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        wget ca-certificates autoconf pkg-config build-essential \
+        libpng-dev libjpeg62-turbo-dev libopenjp2-7-dev libtiff-dev libxml2-dev \
+        zlib1g-dev libbz2-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-#Python 
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
-RUN update-alternatives --config python
-
-
-#Image magick dependencies
-RUN apt-get install -y wget
-RUN apt-get install -y autoconf pkg-config
-
-
-###################################################################################################################
-#Update the git key per this blog post: https://github.blog/2023-03-23-we-updated-our-rsa-ssh-host-key/
-#RUN su
-RUN mkdir -p ~/.ssh
-RUN touch ~/.ssh/known_hosts
-RUN echo SHA256:uNiVztksCsDhcc0u9e8BujQXVUpKZIDTMczCvj3tD2s >> ~/.ssh/known_hosts
-#RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-#RUN ssh-keygen -R github.com
-#RUN curl -L https://api.github.com/meta | jq -r '.ssh_keys | .[]' | sed -e 's/^/github.com /' >> ~/.ssh/known_hosts
-###################################################################################################################
-
-###################################################################################################################
-#Install Image Magick and add it to /bin so it is available from the command line
-# Releases available here: https://github.com/ImageMagick/ImageMagick/releases/
-# Instructions found here: https://stackoverflow.com/questions/74951619/how-to-install-imagemagick-7-on-ubuntu-image
 WORKDIR /usr/src
-RUN mkdir ImageMagick
-WORKDIR /usr/src/ImageMagick
+RUN wget -q "https://github.com/ImageMagick/ImageMagick/archive/refs/tags/${MAGICKVERSION}.tar.gz" \
+    && tar xzf "${MAGICKVERSION}.tar.gz" \
+    && rm "${MAGICKVERSION}.tar.gz"
+WORKDIR /usr/src/ImageMagick-${MAGICKVERSION}
+RUN ./configure \
+        --prefix=/usr/local \
+        --with-bzlib=yes --with-fontconfig=no --with-freetype=no \
+        --with-gslib=no --with-gvc=no --with-jpeg=yes --with-jp2=yes \
+        --with-png=yes --with-tiff=yes --with-xml=yes --with-gs-font-dir=no \
+        --enable-static=no \
+    && make -j"$(nproc)" \
+    && make install \
+    && ldconfig /usr/local/lib/
 
-RUN apt-get install -y build-essential curl libpng-dev
+WORKDIR /usr/src
+RUN rm -rf "/usr/src/ImageMagick-${MAGICKVERSION}"
 
-#Download Image Magick of desired version
-RUN wget https://github.com/ImageMagick/ImageMagick/archive/refs/tags/$MAGICKVERSION.tar.gz && \
-    tar xzf $MAGICKVERSION.tar.gz && \
-    rm $MAGICKVERSION.tar.gz && \
-    apt-get clean && \
-    apt-get autoremove
+RUN apt-get purge -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
-#Build and install Image Magick
-RUN sh ./ImageMagick-$MAGICKVERSION/configure --prefix=/usr/local --with-bzlib=yes --with-fontconfig=no --with-freetype=no --with-gslib=no --with-gvc=no --with-jpeg=yes --with-jp2=yes --with-png=yes --with-tiff=yes --with-xml=yes --with-gs-font-dir=no --enable-static=no 
-RUN make -j
-RUN make install
-RUN ldconfig /usr/local/lib/
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    NORNIR_HEADLESS=1
 
-WORKDIR /usr/src 
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-#################################################################################################
-# Create a folder for nornir source
-WORKDIR /usr/src/app
-RUN mkdir nornir
-WORKDIR /usr/src/app/nornir
+RUN pip install --upgrade pip setuptools wheel
 
-#################################################################################################
-# This is a development environment. Map these folders to the source code on the host machine.
-# For production environments that pull this image, install these packages from git or pip.
-RUN git clone -b dev https://github.com/jamesra/nornir-shared
-RUN git clone -b dev https://github.com/jamesra/nornir-pools
-RUN git clone https://github.com/jamesra/dm4reader
-RUN git clone -b dev https://github.com/jamesra/nornir-imageregistration
-RUN git clone -b dev https://github.com/jamesra/nornir-buildmanager
+COPY nornir-docker/constraints-headless.txt /tmp/constraints-headless.txt
+RUN pip install --no-cache-dir -r /tmp/constraints-headless.txt \
+    && rm -f /tmp/constraints-headless.txt
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-#COPY nornir-projects.txt ./
-#RUN pip install --no-cache-dir -r nornir-projects.txt
+RUN set -eux; \
+    if [ "${INSTALL_CUPY}" = "1" ]; then \
+        pip install --no-cache-dir "${CUPY_PACKAGE}"; \
+    fi
 
-#################################################################################################
-#Cleanup install, removes build environment
-RUN apt-get remove -y build-essential  
-RUN apt-get clean -y
+WORKDIR /opt/nornir
+COPY nornir-shared ./nornir-shared
+COPY nornir-pools ./nornir-pools
+COPY nornir-imageregistration ./nornir-imageregistration
+COPY dm4 ./dm4
+COPY nornir-buildmanager ./nornir-buildmanager
 
-COPY . .
+RUN pip install --no-cache-dir -e ./nornir-shared \
+    && pip install --no-cache-dir -e ./nornir-pools \
+    && pip install --no-cache-dir -e ./nornir-imageregistration \
+    && pip install --no-cache-dir -e ./dm4 \
+    && pip install --no-cache-dir -e ./nornir-buildmanager
+
+WORKDIR /workspace
+CMD ["bash"]

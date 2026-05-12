@@ -1,0 +1,84 @@
+# Local Cursor-oriented dev shell: nornir:dev-cursor-base, monorepo at /workspace, test input at
+# /nornir-testdata (read-only), env aligned with .cursor/environment.json.
+#
+# - cursor-dev (default): bind-mount monorepo root at /workspace (host checkout).
+# - cursor-dev-clone: named volume + git clone/update (appliance / isolated tree).
+#
+# Copy nornir-docker/dev/example.cursor-dev.run.env to nornir-docker/.env and set NORNIR_TESTDATA_HOST
+# to a path on the WSL2 filesystem (see nornir-docker/README.md and docs/docker/cursor_dev.rst).
+#
+# From monorepo root:
+#   docker compose -f nornir-docker/compose.cursor-dev.yaml build cursor-dev
+#   docker compose -f nornir-docker/compose.cursor-dev.yaml run --rm cursor-dev
+#   docker compose -f nornir-docker/compose.cursor-dev.yaml run --rm cursor-dev-clone
+# GPU (optional):
+#   docker compose -f nornir-docker/compose.cursor-dev.yaml run --rm --gpus all cursor-dev
+
+include:
+  - path: compose.yaml
+
+x-cursor-dev-app: &cursor-dev-app
+  build: 
+    context: ..
+    dockerfile: nornir-docker/dev/Dockerfile
+    args:
+      CUPY_PACKAGE: cupy-cuda13x
+      NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
+      SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
+      BUILD_DATE: ${BUILD_DATE:-unknown}
+      IMAGE_SOURCE: ${IMAGE_SOURCE:-https://github.com/jamesra/nornir}
+      NORNIR_IMAGE_VARIANT: dev-cursor-base
+      IMAGE_TITLE: Nornir dev cursor base image
+      IMAGE_DESCRIPTION: Headless Nornir stack with pytest and CuPy for Python 3.14 (no baked monorepo)
+      INSTALL_MONOREPO_EDITABLES: "0"
+      NORNIR_HEADLESS: 1
+  image: nornir:dev-cursor-base
+  working_dir: /workspace
+  stdin_open: true
+  tty: true
+  command:
+    - /bin/bash
+    - /usr/local/bin/cursor-dev-entry.sh
+    - bash
+
+services:
+  cursor-dev:
+    <<: *cursor-dev-app
+    gpus: all
+    environment:
+      NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
+      NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
+      NORNIR_WORKSPACE_STRATEGY: mounted
+      TESTINPUTPATH: /nornir-testdata
+      TESTOUTPUTPATH: /tmp/nornir-test-output
+      NORNIR_HEADLESS: 1
+    volumes:
+      - type: bind
+        source: ${NORNIR_WORKSPACE_HOST:-..}
+        target: /workspace
+      - type: bind
+        source: ${NORNIR_TESTDATA_HOST}
+        target: /nornir-testdata
+        read_only: true
+
+  cursor-dev-clone:
+    <<: *cursor-dev-app
+    gpus: all
+    environment:
+      NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
+      NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
+      NORNIR_WORKSPACE_STRATEGY: clone
+      TESTINPUTPATH: /nornir-testdata
+      TESTOUTPUTPATH: /tmp/nornir-test-output
+      NORNIR_HEADLESS: 1
+    volumes:
+      - type: volume
+        source: cursor-dev-work
+        target: /workspace
+      - type: bind
+        source: ${NORNIR_TESTDATA_HOST}
+        target: /nornir-testdata
+        read_only: true
+
+volumes:
+  cursor-dev-work:

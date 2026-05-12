@@ -1,0 +1,51 @@
+# Self-hosted Cursor cloud agent worker on top of nornir:dev-cursor-base (venv + CuPy; no baked monorepo).
+#
+# Build order (from monorepo root):
+#   docker build -f nornir-docker/dev/Dockerfile --build-arg INSTALL_MONOREPO_EDITABLES=0 -t nornir:dev-cursor-base .
+#   docker build -f nornir-docker/Dockerfile.cursor-worker -t nornir:cursor-worker .
+#
+# Full nornir:dev (with /opt/nornir editables) as base is possible but redundant; use:
+#   --build-arg BASE_IMAGE=nornir:dev
+#
+# Or pass a different base:
+#   docker build -f nornir-docker/Dockerfile.cursor-worker --build-arg BASE_IMAGE=my-registry/nornir:dev-cursor-base -t nornir:cursor-worker .
+
+ARG BASE_IMAGE=nornir:dev-cursor-base
+FROM ${BASE_IMAGE}
+
+ARG CURSOR_AGENT_VERSION=2026.03.30-a5d3e17
+ARG CURSOR_AGENT_ARCH=x64
+
+USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    VERSION="${CURSOR_AGENT_VERSION}"; \
+    ARCH="${CURSOR_AGENT_ARCH}"; \
+    URL="https://downloads.cursor.com/lab/${VERSION}/linux/${ARCH}/agent-cli-package.tar.gz"; \
+    install -d "/opt/cursor-agent/versions/${VERSION}"; \
+    curl -fSL "${URL}" | tar --strip-components=1 -xzf - -C "/opt/cursor-agent/versions/${VERSION}"; \
+    chmod +x "/opt/cursor-agent/versions/${VERSION}/cursor-agent"; \
+    ln -sf "/opt/cursor-agent/versions/${VERSION}/cursor-agent" /usr/local/bin/agent; \
+    ln -sf "/opt/cursor-agent/versions/${VERSION}/cursor-agent" /usr/local/bin/cursor-agent; \
+    agent --version
+
+ENV NO_COLOR=1
+ENV NORNIR_HEADLESS=1
+
+COPY nornir-docker/cursor-worker-entry.sh /usr/local/bin/cursor-worker-entry.sh
+RUN sed -i 's/\r$//' /usr/local/bin/cursor-worker-entry.sh \
+    && chmod +x /usr/local/bin/cursor-worker-entry.sh
+
+# Fallback when /workspace/nornir-docker is empty (e.g. nornir-docker git submodule not initialized after shallow clone).
+COPY nornir-docker/cursor-dev-entry.sh /usr/local/lib/nornir-docker/cursor-dev-entry.sh
+RUN sed -i 's/\r$//' /usr/local/lib/nornir-docker/cursor-dev-entry.sh \
+    && chmod +x /usr/local/lib/nornir-docker/cursor-dev-entry.sh
+
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/cursor-worker-entry.sh"]
+CMD []

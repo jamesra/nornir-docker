@@ -1,3 +1,5 @@
+# DEPRECATED: one-off helper; prefer `docker compose -f nornir-docker/compose.yaml` or `start-sample.ps1`.
+# See https://nornir.github.io/docker/index.html
 $volume = 'test'
 $container_name = "nornir-$volume"
 $test_input_path = "C:/src/git/nornir-testdata"
