@@ -10,6 +10,7 @@
 
   Requires `nornir-docker/.env` (for ${NORNIR_TESTDATA_HOST} substitution) or NORNIR_TESTDATA_HOST already set
   in the environment. Copy from `nornir-docker/dev/example.cursor-dev.run.env` if missing.
+  Optional: set `NORNIR_REPRO_DATA_HOST` in `.env` to mount your repro corpus at `/data` (compose sets `INPUT_NORNIR_DATA=/data`).
 
 .PARAMETER Gpu
   Adds `--gpus all` to the compose run (for CuPy/GPU in the container).

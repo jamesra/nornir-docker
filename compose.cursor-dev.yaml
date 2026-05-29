@@ -7,6 +7,10 @@
 # Copy nornir-docker/dev/example.cursor-dev.run.env to nornir-docker/.env and set NORNIR_TESTDATA_HOST
 # to a path on the WSL2 filesystem (see nornir-docker/README.md and docs/docker/cursor_dev.rst).
 #
+# Optional repro corpus: set NORNIR_REPRO_DATA_HOST to a WSL/Linux path (mirrors Windows D:\Data); it is
+# mounted read-only at /data. Compose sets INPUT_NORNIR_DATA=/data inside the container. If unset, a
+# tiny placeholder under nornir-docker/dev/repro-data-mount-placeholder is mounted so compose still works.
+#
 # From monorepo root:
 #   docker compose -f nornir-docker/compose.cursor-dev.yaml build cursor-dev
 #   docker compose -f nornir-docker/compose.cursor-dev.yaml run --rm cursor-dev
@@ -23,6 +27,7 @@ x-cursor-dev-app: &cursor-dev-app
     dockerfile: nornir-docker/dev/Dockerfile
     args:
       CUPY_PACKAGE: cupy-cuda13x
+      NVIDIA_CUDA_APT_VERSION: ${NVIDIA_CUDA_APT_VERSION:-13-1}
       NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
       SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
       BUILD_DATE: ${BUILD_DATE:-unknown}
@@ -45,6 +50,7 @@ services:
   cursor-dev:
     <<: *cursor-dev-app
     gpus: all
+    shm_size: "64gb"
     environment:
       NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
       NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
@@ -52,6 +58,7 @@ services:
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
       NORNIR_HEADLESS: 1
+      INPUT_NORNIR_DATA: /data
     volumes:
       - type: bind
         source: ${NORNIR_WORKSPACE_HOST:-..}
@@ -60,10 +67,15 @@ services:
         source: ${NORNIR_TESTDATA_HOST}
         target: /nornir-testdata
         read_only: true
+      - type: bind
+        source: ${NORNIR_REPRO_DATA_HOST:-./dev/repro-data-mount-placeholder}
+        target: /data
+        read_only: true
 
   cursor-dev-clone:
     <<: *cursor-dev-app
     gpus: all
+    shm_size: "64gb"
     environment:
       NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
       NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
@@ -71,6 +83,7 @@ services:
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
       NORNIR_HEADLESS: 1
+      INPUT_NORNIR_DATA: /data
     volumes:
       - type: volume
         source: cursor-dev-work
@@ -78,6 +91,10 @@ services:
       - type: bind
         source: ${NORNIR_TESTDATA_HOST}
         target: /nornir-testdata
+        read_only: true
+      - type: bind
+        source: ${NORNIR_REPRO_DATA_HOST:-./dev/repro-data-mount-placeholder}
+        target: /data
         read_only: true
 
 volumes:

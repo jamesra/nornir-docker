@@ -7,7 +7,7 @@
 
   - Build: delegates to docker-build.ps1 (OCI labels + BOM).
   - NornirBuild: docker compose run with repo mounted at /workspace (same convention as nd-build / docs).
-  - CursorDev: delegates to run-cursor-dev.ps1 (requires nornir-docker/.env or NORNIR_TESTDATA_HOST; template dev/example.cursor-dev.run.env).
+  - CursorDev: delegates to run-cursor-dev.ps1 (requires nornir-docker/.env or NORNIR_TESTDATA_HOST; template dev/example.cursor-dev.run.env; optional NORNIR_REPRO_DATA_HOST for /data).
 
 .PARAMETER Sample
   Build | NornirBuild | CursorDev | List

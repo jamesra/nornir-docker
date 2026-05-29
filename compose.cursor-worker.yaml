@@ -30,6 +30,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    shm_size: "64gb"
     build:
       context: ..
       dockerfile: nornir-docker/dev/Dockerfile

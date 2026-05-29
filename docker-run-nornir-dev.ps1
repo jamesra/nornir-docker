@@ -13,6 +13,7 @@
 
   Optional variables in the env files:
     NORNIR_TESTDATA_HOST     — if set, bind-mounts to /nornir-testdata (read-only)
+    NORNIR_REPRO_DATA_HOST   — if set, bind-mounts to /data (read-only); script also sets INPUT_NORNIR_DATA=/data
     NORNIR_DEV_PORT_PUBLISH  — semicolon-separated host:container pairs, e.g. "8888:8888;9000:9000"
 
   Set TESTINPUTPATH / TESTOUTPUTPATH / NORNIR_HEADLESS in .run.nornir-dev.env to match .cursor/environment.json if needed.
@@ -86,6 +87,11 @@ if (-not $testdataHost) {
     $testdataHost = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_TESTDATA_HOST'
 }
 
+$reproDataHost = Get-EnvFileValue -Path $RunEnv -Key 'NORNIR_REPRO_DATA_HOST'
+if (-not $reproDataHost) {
+    $reproDataHost = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_REPRO_DATA_HOST'
+}
+
 $portMap = Get-EnvFileValue -Path $RunEnv -Key 'NORNIR_DEV_PORT_PUBLISH'
 if (-not $portMap) {
     $portMap = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_DEV_PORT_PUBLISH'
@@ -108,6 +114,10 @@ try {
 
     if ($testdataHost) {
         $dockerArgs += @('-v', "${testdataHost}:/nornir-testdata:ro")
+    }
+
+    if ($reproDataHost) {
+        $dockerArgs += @('-v', "${reproDataHost}:/data:ro", '-e', 'INPUT_NORNIR_DATA=/data')
     }
 
     $dockerArgs += @('--env-file', $RunEnv, '--env-file', $SecretsEnv)

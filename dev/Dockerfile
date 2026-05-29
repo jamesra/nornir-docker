@@ -29,7 +29,10 @@ LABEL org.opencontainers.image.title="${IMAGE_TITLE}" \
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG MAGICKVERSION=7.1.1-27
+# Default CuPy wheel = highest CUDA major offered for current CuPy (see docs.cupy.dev install matrix).
 ARG CUPY_PACKAGE=cupy-cuda13x
+# NVIDIA Debian 12 metapackage suffix (cuda-libraries-${NVIDIA_CUDA_APT_VERSION}); stay within CuPy-supported toolkit for that wheel.
+ARG NVIDIA_CUDA_APT_VERSION=13-1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -63,8 +66,9 @@ RUN apt-get purge -y build-essential \
 
 # OpenGL for PyOpenGL (nornir-pyre gl_engine): libGL for GLX; libosmesa6 + PYOPENGL_PLATFORM=osmesa
 # for headless import without an X display.
+# mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgl1 libosmesa6 \
+    && apt-get install -y --no-install-recommends libgl1 libosmesa6 mosquitto mosquitto-clients \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
@@ -76,6 +80,12 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --upgrade pip setuptools wheel
+
+COPY nornir-docker/install-nvidia-cuda-runtime-apt.sh /tmp/install-nvidia-cuda-runtime-apt.sh
+RUN chmod +x /tmp/install-nvidia-cuda-runtime-apt.sh \
+    && NVIDIA_CUDA_APT_VERSION="${NVIDIA_CUDA_APT_VERSION}" CUPY_PACKAGE="${CUPY_PACKAGE}" \
+       /tmp/install-nvidia-cuda-runtime-apt.sh \
+    && rm -f /tmp/install-nvidia-cuda-runtime-apt.sh
 
 COPY nornir-docker/constraints-headless.txt /tmp/constraints-headless.txt
 RUN pip install --no-cache-dir -r /tmp/constraints-headless.txt \
@@ -109,6 +119,9 @@ RUN pip install --no-cache-dir pytest
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/bin/cursor-dev-entry.sh
 RUN sed -i 's/\r$//' /usr/local/bin/cursor-dev-entry.sh \
     && chmod +x /usr/local/bin/cursor-dev-entry.sh
+
+# Repro corpus mount point; populated at run time via compose (see INPUT_NORNIR_DATA, /data bind).
+RUN mkdir -p /data
 
 WORKDIR /workspace
 CMD ["bash"]

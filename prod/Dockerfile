@@ -6,7 +6,7 @@
 # Production + CuPy (same Dockerfile):
 #   docker build -f nornir-docker/prod/Dockerfile --build-arg INSTALL_CUPY=1 -t nornir:cupy .
 #
-# Optional: --build-arg CUPY_PACKAGE=cupy-cuda12x when INSTALL_CUPY=1
+# Optional override: --build-arg CUPY_PACKAGE=cupy-cuda12x --build-arg NVIDIA_CUDA_APT_VERSION=12-6 (majors must match).
 #
 # Headless Nornir stack (no Pyre). Python 3.14 + ImageMagick 7. No pytest (see dev/Dockerfile).
 
@@ -35,6 +35,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG MAGICKVERSION=7.1.1-27
 ARG INSTALL_CUPY=0
 ARG CUPY_PACKAGE=cupy-cuda13x
+ARG NVIDIA_CUDA_APT_VERSION=13-1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -65,6 +66,11 @@ RUN apt-get purge -y build-essential \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
+# mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends mosquitto mosquitto-clients \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     NORNIR_HEADLESS=1
@@ -74,14 +80,20 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip install --upgrade pip setuptools wheel
 
+COPY nornir-docker/install-nvidia-cuda-runtime-apt.sh /tmp/install-nvidia-cuda-runtime-apt.sh
+
 COPY nornir-docker/constraints-headless.txt /tmp/constraints-headless.txt
 RUN pip install --no-cache-dir -r /tmp/constraints-headless.txt \
     && rm -f /tmp/constraints-headless.txt
 
 RUN set -eux; \
     if [ "${INSTALL_CUPY}" = "1" ]; then \
-        pip install --no-cache-dir "${CUPY_PACKAGE}"; \
-    fi
+        chmod +x /tmp/install-nvidia-cuda-runtime-apt.sh \
+        && NVIDIA_CUDA_APT_VERSION="${NVIDIA_CUDA_APT_VERSION}" CUPY_PACKAGE="${CUPY_PACKAGE}" \
+           /tmp/install-nvidia-cuda-runtime-apt.sh \
+        && pip install --no-cache-dir "${CUPY_PACKAGE}"; \
+    fi; \
+    rm -f /tmp/install-nvidia-cuda-runtime-apt.sh
 
 WORKDIR /opt/nornir
 COPY nornir-shared ./nornir-shared
@@ -95,6 +107,9 @@ RUN pip install --no-cache-dir -e ./nornir-shared \
     && pip install --no-cache-dir -e ./nornir-imageregistration \
     && pip install --no-cache-dir -e ./dm4 \
     && pip install --no-cache-dir -e ./nornir-buildmanager
+
+# Optional repro corpus mount point when run with a /data bind (INPUT_NORNIR_DATA).
+RUN mkdir -p /data
 
 WORKDIR /workspace
 CMD ["bash"]
