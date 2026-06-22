@@ -9,7 +9,7 @@ Docker images for the **headless** Nornir stack on Python 3.14 (no Pyre UI). Use
 
 ### Env file naming
 
-Copy a committed ``example.*.run.env`` to a **non-example** filename for local Compose use (e.g. ``nornir-docker/.env``, ``.env.cursor-worker``), or place run overrides under ``$NORNIR_DOCKER_USER_ROOT`` with the same relative layout but **without** the ``example.`` prefix. For **``docker-build.ps1``** build-args, use ``build.env`` and ``.build.<id>.env`` in the directory from which you run the script (see script header). Real secrets and machine-specific paths stay **out of git**.
+Copy a committed ``example.*.run.env`` to a **non-example** filename for local Compose use (e.g. ``nornir-docker/.env``, ``.env.cursor-worker``), or place run overrides under ``$NORNIR_DOCKER_USER_ROOT/Run/<project-key>/`` with the same relative layout but **without** the ``example.`` prefix (e.g. ``D:\Docker\Run\nornir-dev\`` for cursor-dev NAS mounts — see ``windows-docker-layout/NORNIR_DEV_VOLUMES.md``). For **``docker-build.ps1``** build-args, use ``build.env`` and ``.build.<id>.env`` in the directory from which you run the script (see script header). Real secrets and machine-specific paths stay **out of git**.
 
 ## Documentation
 
@@ -27,10 +27,12 @@ Full operational documentation lives in the **Nornir monodoc**:
 | Script | Phase | Purpose |
 |--------|--------|---------|
 | ``docker-build.ps1`` / ``build.cmd`` | Build | All images with OCI labels + BOM JSON from **monorepo root**. Optional build-args from **invocation directory** only: ``build.env`` then ``.build.<id>.env`` per image; logs each path as merged or not found (see script header). Committed ``example.*.build.env`` are templates, not read by the script. |
-| ``run-cursor-dev.ps1`` | Run | ``docker compose … run`` for **cursor-dev** (bind-mounted repo) or **cursor-dev-clone** with ``-Clone``; optional ``-Gpu``. Requires ``nornir-docker/.env`` or ``NORNIR_TESTDATA_HOST`` (template: ``dev/example.cursor-dev.run.env``). Optional ``NORNIR_REPRO_DATA_HOST`` mounts repro data at ``/data`` with ``INPUT_NORNIR_DATA=/data``. |
+| ``run-cursor-dev.ps1`` | Run | ``docker compose … run`` for **cursor-dev** (bind-mounted repo) or **cursor-dev-clone** with ``-Clone``; optional ``-Gpu``. Auto-includes ``$NORNIR_DOCKER_USER_ROOT/Run/nornir-dev/compose.volumes.override.yaml`` when present. Requires ``nornir-docker/.env`` or ``NORNIR_TESTDATA_HOST`` (template: ``dev/example.cursor-dev.run.env``). Optional ``NORNIR_REPRO_DATA_HOST`` mounts repro data at ``/data`` with ``INPUT_NORNIR_DATA=/data``. Test output defaults to ``D:/nornir-test-output`` → ``/tmp/nornir-test-output`` (override with ``NORNIR_TESTOUTPUT_HOST``). |
 | ``start-sample.ps1`` | Mixed | Samples: **Build** → ``docker-build.ps1``; **CursorDev** → ``run-cursor-dev.ps1``; **NornirBuild** → compose ``nornir-build``. |
 | ``nd-build.ps1`` / ``nd-build.cmd`` | Run | Run ``nornir-build`` in a container with cwd mounted at ``/workspace``. |
 | ``start-cursor-worker.ps1`` | Run | Windows launcher for the self-hosted Cursor worker (bind mounts, env files, GPU, cleanup). |
+| ``cursor-dev-entry.sh`` | Run | Container entry: workspace git prep + ``install-monorepo-editables.sh``. |
+| ``install-monorepo-editables.sh`` | Run | ``pip install -e --no-deps`` for headless monorepo packages from ``NORNIR_MONOREPO_ROOT`` (default ``/workspace``). |
 
 ## Quick build (from monorepo root)
 

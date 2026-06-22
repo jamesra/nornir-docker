@@ -102,11 +102,11 @@ COPY nornir-imageregistration ./nornir-imageregistration
 COPY dm4 ./dm4
 COPY nornir-buildmanager ./nornir-buildmanager
 
-RUN pip install --no-cache-dir -e ./nornir-shared \
-    && pip install --no-cache-dir -e ./nornir-pools \
-    && pip install --no-cache-dir -e ./nornir-imageregistration \
-    && pip install --no-cache-dir -e ./dm4 \
-    && pip install --no-cache-dir -e ./nornir-buildmanager
+COPY nornir-docker/install-monorepo-editables.sh /tmp/install-monorepo-editables.sh
+
+RUN chmod +x /tmp/install-monorepo-editables.sh \
+    && NORNIR_MONOREPO_ROOT=/opt/nornir /tmp/install-monorepo-editables.sh \
+    && rm -f /tmp/install-monorepo-editables.sh
 
 # Optional repro corpus mount point when run with a /data bind (INPUT_NORNIR_DATA).
 RUN mkdir -p /data

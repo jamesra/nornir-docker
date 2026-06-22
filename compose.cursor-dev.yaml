@@ -11,6 +11,18 @@
 # mounted read-only at /data. Compose sets INPUT_NORNIR_DATA=/data inside the container. If unset, a
 # tiny placeholder under nornir-docker/dev/repro-data-mount-placeholder is mounted so compose still works.
 #
+# Test output: NORNIR_TESTOUTPUT_HOST (default D:/nornir-test-output) is bind-mounted at
+# /tmp/nornir-test-output (TESTOUTPUTPATH). On WSL-only Compose, use /mnt/d/nornir-test-output instead.
+#
+# Legacy SCI SVN tree: NORNIR_LEGACY_CODE_HOST (default D:/src/SVN/SCI/trunk) is bind-mounted read-only
+# at /legacycode. On WSL-only Compose, use /mnt/d/src/SVN/SCI/trunk instead.
+#
+# NAS Volumes: NORNIR_VOLUMES_HOST (WSL mount of \\192.168.0.199\Data\Volumes) is bind-mounted
+# at /volumes (read-write for build output). If unset, nornir-docker/dev/volumes-mount-placeholder is mounted.
+# Docker Desktop on Windows: use \\wsl.localhost\<Distro>\mnt\nornir-volumes (same style as NORNIR_TESTDATA_HOST).
+#
+# On start, cursor-dev-entry.sh runs install-monorepo-editables.sh (pip install -e --no-deps from /workspace).
+#
 # From monorepo root:
 #   docker compose -f nornir-docker/compose.cursor-dev.yaml build cursor-dev
 #   docker compose -f nornir-docker/compose.cursor-dev.yaml run --rm cursor-dev
@@ -57,6 +69,8 @@ services:
       NORNIR_WORKSPACE_STRATEGY: mounted
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
+      NORNIR_IMPORT_CACHE_PATH: ${NORNIR_IMPORT_CACHE_PATH:-/tmp/nornir-test-output/ImportCache}
+      NORNIR_LOG_ROOT: /workspace/.nornir-logs
       NORNIR_HEADLESS: 1
       INPUT_NORNIR_DATA: /data
     volumes:
@@ -71,6 +85,16 @@ services:
         source: ${NORNIR_REPRO_DATA_HOST:-./dev/repro-data-mount-placeholder}
         target: /data
         read_only: true
+      - type: bind
+        source: ${NORNIR_TESTOUTPUT_HOST:-D:/nornir-test-output}
+        target: /tmp/nornir-test-output
+      - type: bind
+        source: ${NORNIR_LEGACY_CODE_HOST:-D:/src/SVN/SCI/trunk}
+        target: /legacycode
+        read_only: true
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
+        target: /volumes
 
   cursor-dev-clone:
     <<: *cursor-dev-app
@@ -82,6 +106,8 @@ services:
       NORNIR_WORKSPACE_STRATEGY: clone
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
+      NORNIR_IMPORT_CACHE_PATH: ${NORNIR_IMPORT_CACHE_PATH:-/tmp/nornir-test-output/ImportCache}
+      NORNIR_LOG_ROOT: /workspace/.nornir-logs
       NORNIR_HEADLESS: 1
       INPUT_NORNIR_DATA: /data
     volumes:
@@ -96,6 +122,16 @@ services:
         source: ${NORNIR_REPRO_DATA_HOST:-./dev/repro-data-mount-placeholder}
         target: /data
         read_only: true
+      - type: bind
+        source: ${NORNIR_TESTOUTPUT_HOST:-D:/nornir-test-output}
+        target: /tmp/nornir-test-output
+      - type: bind
+        source: ${NORNIR_LEGACY_CODE_HOST:-D:/src/SVN/SCI/trunk}
+        target: /legacycode
+        read_only: true
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
+        target: /volumes
 
 volumes:
   cursor-dev-work:

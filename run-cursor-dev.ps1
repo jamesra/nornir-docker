@@ -56,8 +56,20 @@ if (Test-Path -LiteralPath $envFile) {
 Set-Location -LiteralPath $RepoRoot
 
 $composeFile = Join-Path $DockerDir 'compose.cursor-dev.yaml'
+$composeFiles = @('-f', $composeFile)
+
+$userRoot = $env:NORNIR_DOCKER_USER_ROOT
+if (-not [string]::IsNullOrWhiteSpace($userRoot)) {
+    $volumesOverride = Join-Path $userRoot 'Run\nornir-dev\compose.volumes.override.yaml'
+    if (Test-Path -LiteralPath $volumesOverride) {
+        $composeFiles += @('-f', $volumesOverride)
+        Write-Host "Using volumes override: $volumesOverride"
+    }
+}
+
 $runArgs = @(
-    'compose', '-f', $composeFile,
+    'compose'
+) + $composeFiles + @(
     'run', '--rm'
 )
 if ($Gpu) {

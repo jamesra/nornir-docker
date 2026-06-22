@@ -102,23 +102,25 @@ COPY nornir-imageregistration ./nornir-imageregistration
 COPY dm4 ./dm4
 COPY nornir-buildmanager ./nornir-buildmanager
 
+COPY nornir-docker/install-monorepo-editables.sh /tmp/install-monorepo-editables.sh
+
 # Local pyprojects reference git URLs for sibling deps; install in order with --no-deps.
-RUN if [ "${INSTALL_MONOREPO_EDITABLES}" = "1" ]; then \
-      pip install --no-cache-dir -e ./nornir-shared \
-      && pip install --no-cache-dir -e ./nornir-pools \
-      && pip install --no-cache-dir -e ./nornir-imageregistration \
-      && pip install --no-cache-dir -e ./dm4 \
-      && pip install --no-cache-dir -e ./nornir-buildmanager; \
+RUN chmod +x /tmp/install-monorepo-editables.sh \
+    && if [ "${INSTALL_MONOREPO_EDITABLES}" = "1" ]; then \
+      NORNIR_MONOREPO_ROOT=/opt/nornir /tmp/install-monorepo-editables.sh; \
     else \
       rm -rf ./nornir-shared ./nornir-pools ./nornir-imageregistration ./dm4 ./nornir-buildmanager; \
-    fi
+    fi \
+    && rm -f /tmp/install-monorepo-editables.sh
 
 # Dev/test tooling (not in prod image)
 RUN pip install --no-cache-dir pytest
 
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/bin/cursor-dev-entry.sh
+COPY nornir-docker/install-monorepo-editables.sh /usr/local/bin/install-monorepo-editables.sh
 RUN sed -i 's/\r$//' /usr/local/bin/cursor-dev-entry.sh \
-    && chmod +x /usr/local/bin/cursor-dev-entry.sh
+    && sed -i 's/\r$//' /usr/local/bin/install-monorepo-editables.sh \
+    && chmod +x /usr/local/bin/cursor-dev-entry.sh /usr/local/bin/install-monorepo-editables.sh
 
 # Repro corpus mount point; populated at run time via compose (see INPUT_NORNIR_DATA, /data bind).
 RUN mkdir -p /data

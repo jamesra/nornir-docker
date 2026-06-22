@@ -1,0 +1,22 @@
+# Template — copy to D:\Docker\Run\nornir-dev\compose.volumes.override.yaml (not committed).
+# Requires NORNIR_VOLUMES_HOST in D:\Docker\Run\nornir-dev\.run.nornir-dev.env or nornir-docker/.env.
+#
+# Use with:
+#   docker compose -f nornir-docker/compose.cursor-dev.yaml \
+#     -f D:/Docker/Run/nornir-dev/compose.volumes.override.yaml run --rm --gpus all cursor-dev
+#
+# Or reopen dev container using D:\Docker\Run\nornir-dev\devcontainer.json
+# (see example.nornir-dev.volumes.devcontainer.json).
+
+services:
+  cursor-dev:
+    volumes:
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST}
+        target: /volumes
+
+  cursor-dev-clone:
+    volumes:
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST}
+        target: /volumes

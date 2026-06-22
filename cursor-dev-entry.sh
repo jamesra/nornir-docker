@@ -9,12 +9,15 @@ set -euo pipefail
 export GIT_TERMINAL_PROMPT=0
 
 install_editables() {
-  cd /workspace
-  pip install --no-cache-dir -e ./nornir-shared
-  pip install --no-cache-dir -e ./nornir-pools
-  pip install --no-cache-dir -e ./nornir-imageregistration
-  pip install --no-cache-dir -e ./dm4
-  pip install --no-cache-dir -e ./nornir-buildmanager
+  local script="/usr/local/bin/install-monorepo-editables.sh"
+  if [[ ! -x "${script}" ]]; then
+    script="/workspace/nornir-docker/install-monorepo-editables.sh"
+  fi
+  if [[ ! -f "${script}" ]]; then
+    echo "cursor-dev-entry: missing install-monorepo-editables.sh" >&2
+    exit 1
+  fi
+  NORNIR_MONOREPO_ROOT=/workspace bash "${script}"
 }
 
 if [[ "${NORNIR_CURSOR_DEV_SETUP_ONLY:-0}" == "1" ]]; then

@@ -1,0 +1,26 @@
+{
+  "name": "Nornir (cursor-dev + NAS /volumes)",
+  "dockerComposeFile": [
+    "${localEnv:NORNIR_MONOREPO_ROOT}/nornir-docker/compose.cursor-dev.yaml",
+    "${localEnv:NORNIR_DOCKER_USER_ROOT}/Run/nornir-dev/compose.volumes.override.yaml"
+  ],
+  "service": "cursor-dev",
+  "workspaceFolder": "/workspace",
+  "overrideCommand": false,
+  "postAttachCommand": "NORNIR_CURSOR_DEV_SETUP_ONLY=1 /usr/local/bin/cursor-dev-entry.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-pylance",
+        "lextudio.restructuredtext"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false
+      }
+    }
+  }
+}
