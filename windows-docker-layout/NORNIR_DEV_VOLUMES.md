@@ -1,87 +1,130 @@
-# NAS `/volumes` mount for cursor-dev (machine-local)
+# NAS volumes and in-container CIFS for cursor-dev (machine-local)
 
-Per the **docker-machine-layout** rule, **runtime** Docker config lives under **`D:\Docker\Run\nornir-dev\`** (existing layout folder). Committed **templates** live under `nornir-docker/dev/example.*`.
+Per the **docker-machine-layout** rule, **runtime** Docker config lives under **`D:\Docker\Run\nornir-dev\`**. Committed **templates** live under `nornir-docker/dev/example.*`.
+
+There are **two** ways to see NAS data in the container:
+
+| Path | Mechanism | Speed | Env / files |
+|------|-----------|-------|-------------|
+| `/volumes` | Bind-mount a **WSL host** mount (`NORNIR_VOLUMES_HOST`) | Often slow (9p/drvfs) | `mount-volumes-wsl.sh` + `NORNIR_VOLUMES_HOST` |
+| `/storage4` | **In-container CIFS** from `nas-mounts.tsv` | Fast (SMB direct) | `compose.net-mounts.override.yaml` + `NORNIR_NET_MOUNTS_*` |
+
+Compose also bind-mounts `NORNIR_VOLUMES_HOST` at `/storage4` as a legacy alias of `/volumes`. When CIFS is enabled, `mount-network-shares.sh` mounts the real share **over** that bind so `/storage4` becomes native CIFS.
+
+---
 
 ## One-time setup
 
-### 1. Layout folder (already exists)
+### 1. Layout folder
 
 ```text
 D:\Docker\Run\nornir-dev\
 ```
 
-### 2. Copy or update templates from the repo
+### 2. Copy templates from the repo
 
 | Copy from (repo) | To (machine-local) |
 |------------------|-------------------|
-| `nornir-docker/dev/example.compose.volumes.override.yaml` | `D:\Docker\Run\nornir-dev\compose.volumes.override.yaml` |
-| `nornir-docker/dev/example.nornir-dev.volumes.devcontainer.json` | `D:\Docker\Run\nornir-dev\devcontainer.json` |
-| `nornir-docker/dev/example.nornir-dev.volumes.run.env` | merge into `D:\Docker\Run\nornir-dev\.run.nornir-dev.env` |
+| `nornir-docker/dev/example.compose.net-mounts.override.yaml` | `D:\Docker\Run\nornir-dev\compose.net-mounts.override.yaml` |
+| `nornir-docker/dev/example.nas-mounts.tsv` | `D:\Docker\Run\nornir-dev\net-mounts\nas-mounts.tsv` |
+| `nornir-docker/dev/example.nornir-dev.net-mounts.devcontainer.json` | `D:\Docker\Run\nornir-dev\devcontainer.json` |
 | `nornir-docker/dev/example.mount-volumes-wsl.sh` | `D:\Docker\Run\nornir-dev\mount-volumes-wsl.sh` |
+| `nornir-docker/dev/example.modules-load.net-shares.conf` (if present) or `Run\...\modules-load.net-shares.conf` | WSL `/etc/modules-load.d/net-shares.conf` |
 
-Set Windows user environment variables (Dev Containers / Compose):
+Put CIFS credentials in **`D:\Docker\Run\nornir-dev\secrets\net-creds\storage4.cred`** (`chmod 600` / tight Windows ACL). Do not commit them.
+
+Windows user env (Dev Containers):
 
 - `NORNIR_MONOREPO_ROOT` — e.g. `D:\src\git\nornir`
-- `NORNIR_DOCKER_USER_ROOT` — `D:\Docker` (used by `devcontainer.json` compose paths)
+- `NORNIR_DOCKER_USER_ROOT` — `D:\Docker`
 
-### 3. Mount NAS in WSL
+### 3. Load CIFS on the WSL2 host kernel
 
-From **WSL Ubuntu** (host, not inside the container):
+Containers share the WSL2 kernel. After copying `modules-load.net-shares.conf` into the distro:
 
 ```bash
-bash /mnt/d/Docker/Run/nornir-dev/mount-volumes-wsl.sh
+# In WSL, with systemd=true in /etc/wsl.conf:
+sudo cp /mnt/d/Docker/Run/nornir-dev/modules-load.net-shares.conf /etc/modules-load.d/net-shares.conf
+sudo modprobe cifs
+grep cifs /proc/filesystems
 ```
 
-Default mount: `/mnt/nornir-volumes` → `\\192.168.0.199\Data\Volumes`
+### 4. Env vars for Compose
 
-### 4. Set `NORNIR_VOLUMES_HOST`
-
-Add this line to **`nornir-docker/.env`** (default Dev Container reads this file for Compose substitution):
+Add to **`nornir-docker/.env`** (Compose substitution for the override) **and** merge into **`D:\Docker\Run\nornir-dev\.run.nornir-dev.env`**:
 
 ```env
-# Docker Desktop + WSL NAS mount (match your distro name; same style as NORNIR_TESTDATA_HOST):
-NORNIR_VOLUMES_HOST=\\wsl.localhost\Ubuntu\mnt\nornir-volumes
-
-# Or when running Compose from a WSL shell only:
-# NORNIR_VOLUMES_HOST=/mnt/nornir-volumes
+NORNIR_NET_MOUNTS_DIR_HOST=\\wsl.localhost\Ubuntu\mnt\d\Docker\Run\nornir-dev\net-mounts
+NORNIR_NET_CREDS_DIR_HOST=\\wsl.localhost\Ubuntu\mnt\d\Docker\Run\nornir-dev\secrets\net-creds
 ```
 
-Also merge into **`D:\Docker\Run\nornir-dev\.run.nornir-dev.env`** when using `docker-run-nornir-dev.ps1`.
+(WSL-only Compose can use `/mnt/d/Docker/Run/nornir-dev/...` instead.)
 
-**Important:** Rebuilding the **image** does not add `/volumes`. You need this env var plus **Dev Containers: Rebuild Container** (or `docker compose … run`) so Compose applies the bind mount.
+Optional slow bind for `/volumes`:
 
-The bind is defined in **`compose.cursor-dev.yaml`** (placeholder when unset). The optional **`compose.volumes.override.yaml`** under `D:\Docker\Run\nornir-dev\` is legacy/duplicate for the same mount when using a machine-local second compose file.
+```env
+NORNIR_VOLUMES_HOST=\\wsl.localhost\Ubuntu\mnt\nornir-volumes
+```
 
-## Start container
+### 5. Rebuild the image (once)
 
-**Option A — personal devcontainer**
+The image needs `cifs-utils` and `/usr/local/bin/mount-network-shares.sh`:
+
+```powershell
+# from monorepo root
+docker build -f nornir-docker/dev/Dockerfile --build-arg INSTALL_MONOREPO_EDITABLES=0 -t nornir:dev-cursor-base .
+```
+
+---
+
+## Start container (fast `/storage4`)
+
+**Option A — Dev Container**
 
 Command palette → **Dev Containers: Open Folder in Container…** →  
-`D:\Docker\Run\nornir-dev\devcontainer.json`
+`D:\Docker\Run\nornir-dev\devcontainer.json`  
+(or Rebuild Container after changing compose/env)
 
-**Option B — compose**
+**Option B — `run-cursor-dev.ps1`**
 
-`run-cursor-dev.ps1` picks up `D:\Docker\Run\nornir-dev\compose.volumes.override.yaml` automatically when present (requires `NORNIR_DOCKER_USER_ROOT=D:\Docker`).
+With `NORNIR_DOCKER_USER_ROOT=D:\Docker`, the script auto-adds  
+`D:\Docker\Run\nornir-dev\compose.net-mounts.override.yaml` when that file exists.
 
-Or manually:
+**Option C — manual compose**
 
 ```powershell
 docker compose `
   -f nornir-docker/compose.cursor-dev.yaml `
-  -f D:/Docker/Run/nornir-dev/compose.volumes.override.yaml `
+  -f D:/Docker/Run/nornir-dev/compose.net-mounts.override.yaml `
   run --rm --gpus all cursor-dev
 ```
 
-**Option C — `docker-run-nornir-dev.ps1`**
-
-From `D:\Docker\Run\nornir-dev\` with `.run.nornir-dev.env` containing `NORNIR_VOLUMES_HOST`; the script bind-mounts it at `/volumes` (read-write).
+---
 
 ## Verify
 
-Inside the new container:
+Inside the container:
 
 ```bash
-ls /volumes
+echo "$NORNIR_NET_MOUNTS"          # expect 1
+ls /etc/nornir-net-mounts
+ls /run/secrets/net-creds
+findmnt -no FSTYPE,SOURCE /storage4
+# expect: cifs  //192.168.0.199/Data/Volumes
+ls /storage4 | head
 ```
 
-Use e.g. `/volumes/RC2/TEM` as the volume path in launch configs.
+Use e.g. `/storage4/RC2/TEM` (or `/volumes/...` for the slow bind) in launch configs.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `/storage4` is empty / placeholder | Override not applied; check compose `-f` list and rebuild Dev Container |
+| `NORNIR_NET_MOUNTS` unset | Override missing or wrong path in `devcontainer.json` |
+| `mount: ... Operation not permitted` | Missing `SYS_ADMIN` (override not used) |
+| `mount error(2): No such file or directory` for cifs | `cifs` not in `/proc/filesystems` on WSL host |
+| `mount error(13): Permission denied` | Bad/missing `.cred` or world-readable credentials file |
+| Still `9p` / `drvfs` on `/storage4` | Entry script not run / old image without `mount-network-shares.sh` — rebuild image |

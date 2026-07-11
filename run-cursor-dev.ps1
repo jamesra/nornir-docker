@@ -65,6 +65,11 @@ if (-not [string]::IsNullOrWhiteSpace($userRoot)) {
         $composeFiles += @('-f', $volumesOverride)
         Write-Host "Using volumes override: $volumesOverride"
     }
+    $netMountsOverride = Join-Path $userRoot 'Run\nornir-dev\compose.net-mounts.override.yaml'
+    if (Test-Path -LiteralPath $netMountsOverride) {
+        $composeFiles += @('-f', $netMountsOverride)
+        Write-Host "Using net-mounts override: $netMountsOverride"
+    }
 }
 
 $runArgs = @(

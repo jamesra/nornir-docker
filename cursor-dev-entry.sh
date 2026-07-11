@@ -4,9 +4,27 @@
 # NORNIR_WORKSPACE_STRATEGY=mounted (default): bind-mounted checkout - git fetch only unless NORNIR_SYNC_REMOTE=1.
 # NORNIR_WORKSPACE_STRATEGY=clone: named volume / appliance - clone if empty; refresh branch when .git exists.
 # NORNIR_CURSOR_DEV_SETUP_ONLY=1: pip install -e only (used by cursor-worker-entry.sh after git prep).
+# NORNIR_NET_MOUNTS=1: apply /etc/nornir-net-mounts/nas-mounts.tsv (CIFS/NFS) via mount-network-shares.sh.
 set -euo pipefail
 
 export GIT_TERMINAL_PROMPT=0
+
+apply_network_shares() {
+  local script="/usr/local/bin/mount-network-shares.sh"
+  if [[ ! -f "${script}" ]]; then
+    script="/usr/local/lib/nornir-docker/mount-network-shares.sh"
+  fi
+  if [[ ! -f "${script}" ]]; then
+    script="/workspace/nornir-docker/mount-network-shares.sh"
+  fi
+  if [[ "${NORNIR_NET_MOUNTS:-}" == "1" ]]; then
+    if [[ ! -f "${script}" ]]; then
+      echo "cursor-dev-entry: NORNIR_NET_MOUNTS=1 but mount-network-shares.sh not found" >&2
+      exit 1
+    fi
+    bash "${script}"
+  fi
+}
 
 install_editables() {
   local script="/usr/local/bin/install-monorepo-editables.sh"
@@ -19,6 +37,9 @@ install_editables() {
   fi
   NORNIR_MONOREPO_ROOT=/workspace bash "${script}"
 }
+
+# Mounts before SETUP_ONLY so worker/dev attach paths also get /storage4 when caps+binds are present.
+apply_network_shares
 
 if [[ "${NORNIR_CURSOR_DEV_SETUP_ONLY:-0}" == "1" ]]; then
   install_editables

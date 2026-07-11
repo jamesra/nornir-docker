@@ -5,18 +5,19 @@
 .DESCRIPTION
   Intended to live at D:\Docker\Builds\nornir-cursor-worker\start-nornir-cursor-worker.ps1 (symlink to this file).
   Defaults: -LiveMount -UseUniqueWorkspaceFolder with -WorkspaceRunParent D:\Docker\mounted-configs\nornir-cursor-worker so each run gets its own
-  empty host folder; NORNIR_WORKSPACE_STRATEGY=clone (container clones into /workspace). Env file: .env.cursor-worker next to this script unless overridden.
+  empty host folder; NORNIR_WORKSPACE_STRATEGY=clone (container clones into /workspace).
+  Run env default: D:\Docker\Run\nornir-cursor-worker\nornir-cursor-worker.run.env when present.
 
 .PARAMETER RepoRoot
   Monorepo root (parent of nornir-docker). If omitted, uses environment variable NORNIR_MONOREPO_ROOT.
 
 .PARAMETER EnvFilePath
-  Path to .env.cursor-worker. Default: Join-Path $PSScriptRoot '.env.cursor-worker'
+  Path to worker run env. Default: $NORNIR_CURSOR_WORKER_ENV_FILE, then D:\Docker\Run\nornir-cursor-worker\nornir-cursor-worker.run.env, then legacy .env.cursor-worker next to this script.
 
 .PARAMETER WorkspaceRunParent
   Parent for per-run unique folders (nornir-cursor-worker-<stamp>-<guid>). Default: D:\Docker\mounted-configs\nornir-cursor-worker
 
-  All other switches/parameters are forwarded to start-cursor-worker.ps1 (e.g. -Rebuild, -Gpu, -RemoveCloneAfter).
+  All other switches/parameters are forwarded to start-cursor-worker.ps1 (e.g. -Rebuild, -Gpu, -RemoveCloneAfter, -DevParityMounts).
 #>
 [CmdletBinding()]
 param(
@@ -54,7 +55,20 @@ if (-not (Test-Path -LiteralPath $worker)) {
 }
 
 if (-not $EnvFilePath) {
-    $EnvFilePath = Join-Path $PSScriptRoot ".env.cursor-worker"
+    if ($env:NORNIR_CURSOR_WORKER_ENV_FILE -and (Test-Path -LiteralPath $env:NORNIR_CURSOR_WORKER_ENV_FILE)) {
+        $EnvFilePath = $env:NORNIR_CURSOR_WORKER_ENV_FILE
+    }
+    else {
+        $dockerRoot = $env:NORNIR_DOCKER_USER_ROOT
+        if ([string]::IsNullOrWhiteSpace($dockerRoot)) { $dockerRoot = 'D:\Docker' }
+        $canonical = Join-Path $dockerRoot "Run\nornir-cursor-worker\nornir-cursor-worker.run.env"
+        if (Test-Path -LiteralPath $canonical) {
+            $EnvFilePath = $canonical
+        }
+        else {
+            $EnvFilePath = Join-Path $PSScriptRoot ".env.cursor-worker"
+        }
+    }
 }
 
 $forward = @{

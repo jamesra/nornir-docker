@@ -14,7 +14,7 @@
   Optional variables in the env files:
     NORNIR_TESTDATA_HOST     — if set, bind-mounts to /nornir-testdata (read-only)
     NORNIR_REPRO_DATA_HOST   — if set, bind-mounts to /data (read-only); script also sets INPUT_NORNIR_DATA=/data
-    NORNIR_VOLUMES_HOST      — if set, bind-mounts to /volumes (read-write); WSL path to \\192.168.0.199\Data\Volumes
+    NORNIR_VOLUMES_HOST      — if set, bind-mounts to /volumes and /storage4 (read-write); WSL path to \\192.168.0.199\Data\Volumes
     NORNIR_DEV_PORT_PUBLISH  — semicolon-separated host:container pairs, e.g. "8888:8888;9000:9000"
 
   Set TESTINPUTPATH / TESTOUTPUTPATH / NORNIR_HEADLESS in .run.nornir-dev.env to match .cursor/environment.json if needed.
@@ -98,6 +98,15 @@ if (-not $volumesHost) {
     $volumesHost = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_VOLUMES_HOST'
 }
 
+$netMountsDir = Get-EnvFileValue -Path $RunEnv -Key 'NORNIR_NET_MOUNTS_DIR_HOST'
+if (-not $netMountsDir) {
+    $netMountsDir = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_NET_MOUNTS_DIR_HOST'
+}
+$netCredsDir = Get-EnvFileValue -Path $RunEnv -Key 'NORNIR_NET_CREDS_DIR_HOST'
+if (-not $netCredsDir) {
+    $netCredsDir = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_NET_CREDS_DIR_HOST'
+}
+
 $portMap = Get-EnvFileValue -Path $RunEnv -Key 'NORNIR_DEV_PORT_PUBLISH'
 if (-not $portMap) {
     $portMap = Get-EnvFileValue -Path $SecretsEnv -Key 'NORNIR_DEV_PORT_PUBLISH'
@@ -127,7 +136,22 @@ try {
     }
 
     if ($volumesHost) {
-        $dockerArgs += @('-v', "${volumesHost}:/volumes")
+        $dockerArgs += @('-v', "${volumesHost}:/volumes", '-v', "${volumesHost}:/storage4")
+    }
+
+    if ($netMountsDir -and $netCredsDir) {
+        $dockerArgs += @(
+            '--cap-add', 'SYS_ADMIN',
+            '--cap-add', 'DAC_READ_SEARCH',
+            '--security-opt', 'apparmor=unconfined',
+            '-v', "${netMountsDir}:/etc/nornir-net-mounts:ro",
+            '-v', "${netCredsDir}:/run/secrets/net-creds:ro",
+            '-e', 'NORNIR_NET_MOUNTS=1'
+        )
+        # Prefer entry script that applies nas-mounts.tsv (image has mount-network-shares.sh).
+        if (-not $RemainingArgs -or $RemainingArgs.Count -eq 0) {
+            $RemainingArgs = @('/usr/local/bin/cursor-dev-entry.sh', 'bash', '-l')
+        }
     }
 
     $dockerArgs += @('--env-file', $RunEnv, '--env-file', $SecretsEnv)

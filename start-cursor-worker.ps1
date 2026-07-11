@@ -41,7 +41,10 @@
   Short-lived container: agent --version then sleep (no CURSOR_API_KEY required). Mounts WorkspaceMountPath or RepoRoot at /workspace.
 
 .PARAMETER EnvFilePath
-  Full path to the worker env file. If omitted: NORNIR_CURSOR_WORKER_ENV_FILE if set; else nornir-docker/.env.cursor-worker if present; else $NORNIR_DOCKER_USER_ROOT/nornir-cursor-worker.run.env; default path for messages is nornir-docker/.env.cursor-worker. Committed template: example.nornir-cursor-worker.run.env.
+  Full path to the worker env file. If omitted: NORNIR_CURSOR_WORKER_ENV_FILE; then $NORNIR_DOCKER_USER_ROOT/Run/nornir-cursor-worker/nornir-cursor-worker.run.env; legacy Builds/.env.cursor-worker; nornir-docker/.env.cursor-worker. Template: example.nornir-cursor-worker.run.env.
+
+.PARAMETER DevParityMounts
+  Bind-mount cursor-dev data paths (/volumes, /nornir-testdata, etc.) using Run/nornir-dev/.run.nornir-dev.env and nornir-docker/.env. Also enabled when NORNIR_WORKER_DEV_PARITY_MOUNTS=1 in the worker run env.
 
 .PARAMETER WorkspaceMountPath
   Host directory bind-mounted at /workspace when -LiveMount or -SmokeTest is used. If omitted, uses RepoRoot (monorepo root). Ignored when -UseUniqueWorkspaceFolder is set.
@@ -126,12 +129,16 @@ param(
     [string]$EnvFilePath = "",
     [string]$WorkspaceMountPath = "",
     [switch]$UseUniqueWorkspaceFolder,
-    [string]$WorkspaceRunParent = "D:\Docker\mounted-configs\nornir-cursor-worker"
+    [string]$WorkspaceRunParent = "D:\Docker\mounted-configs\nornir-cursor-worker",
+    [switch]$DevParityMounts
 )
 
 $ErrorActionPreference = "Continue"
 
 . (Join-Path $PSScriptRoot "CursorWorkerWorkspaceGit.ps1")
+. (Join-Path $PSScriptRoot "NornirDotEnv.ps1")
+. (Join-Path $PSScriptRoot "NornirDevRunMounts.ps1")
+. (Join-Path $PSScriptRoot "NornirDockerBuild.ps1")
 
 function Set-CursorWorkerWindowTitle {
     param(
@@ -175,23 +182,27 @@ elseif ($env:NORNIR_CURSOR_WORKER_ENV_FILE) {
 else {
     $defaultRuntime = Join-Path $PSScriptRoot ".env.cursor-worker"
     $coLocatedRun = Join-Path $PSScriptRoot "nornir-cursor-worker.run.env"
-    if (Test-Path -LiteralPath $defaultRuntime) {
-        $script:envFile = $defaultRuntime
-    }
-    elseif (Test-Path -LiteralPath $coLocatedRun) {
-        $script:envFile = $coLocatedRun
-    }
-    else {
-        $ur = $env:NORNIR_DOCKER_USER_ROOT
-        if ($ur -and $ur.Trim()) {
-            $userRun = Join-Path $ur.Trim() "nornir-cursor-worker.run.env"
-            if (Test-Path -LiteralPath $userRun) {
-                $script:envFile = $userRun
+    $ur = $env:NORNIR_DOCKER_USER_ROOT
+    if ($ur -and $ur.Trim()) {
+        $canonicalRun = Join-Path $ur.Trim() "Run\nornir-cursor-worker\nornir-cursor-worker.run.env"
+        if (Test-Path -LiteralPath $canonicalRun) {
+            $script:envFile = $canonicalRun
+        }
+        else {
+            $legacyBuildsEnv = Join-Path $ur.Trim() "Builds\nornir-cursor-worker\.env.cursor-worker"
+            if (Test-Path -LiteralPath $legacyBuildsEnv) {
+                $script:envFile = $legacyBuildsEnv
             }
         }
-        if (-not $script:envFile) {
-            $script:envFile = $defaultRuntime
-        }
+    }
+    if (-not $script:envFile -and (Test-Path -LiteralPath $defaultRuntime)) {
+        $script:envFile = $defaultRuntime
+    }
+    if (-not $script:envFile -and (Test-Path -LiteralPath $coLocatedRun)) {
+        $script:envFile = $coLocatedRun
+    }
+    if (-not $script:envFile) {
+        $script:envFile = $defaultRuntime
     }
 }
 
@@ -206,56 +217,10 @@ function Resolve-WorkspaceMountHostPath {
     return (Resolve-Path -LiteralPath $p).ProviderPath
 }
 
-function Import-DotEnvFile {
-    param(
-        [string]$Path,
-        # Never promote GitHub PATs into the host process (avoids GCM / leaked env); container gets them via --env-file only.
-        [string[]]$ExcludeFromHostProcess = @("GITHUB_TOKEN", "GH_TOKEN")
-    )
-    $exclude = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($x in $ExcludeFromHostProcess) { [void]$exclude.Add($x) }
-    if (-not (Test-Path -LiteralPath $Path)) { return }
-    Get-Content -LiteralPath $Path | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -match '^\s*#' -or $line -eq '') { return }
-        if ($line -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            $name = $Matches[1]
-            if ($exclude.Contains($name)) { return }
-            $raw = $Matches[2].Trim()
-            if (($raw.StartsWith('"') -and $raw.EndsWith('"')) -or ($raw.StartsWith("'") -and $raw.EndsWith("'"))) {
-                $raw = $raw.Substring(1, $raw.Length - 2)
-            }
-            $existing = [Environment]::GetEnvironmentVariable($name, "Process")
-            if ([string]::IsNullOrEmpty($existing)) {
-                [Environment]::SetEnvironmentVariable($name, $raw, "Process")
-            }
-        }
-    }
-}
-
-function Get-DotEnvVariableValue {
-    param([string]$Path, [string]$VariableName)
-    if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    foreach ($line in Get-Content -LiteralPath $Path) {
-        $lineT = $line.Trim()
-        if ($lineT -match '^\s*#' -or $lineT -eq '') { continue }
-        if ($lineT -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            $name = $Matches[1]
-            if (-not [string]::Equals($name, $VariableName, [StringComparison]::OrdinalIgnoreCase)) { continue }
-            $raw = $Matches[2].Trim()
-            if (($raw.StartsWith('"') -and $raw.EndsWith('"')) -or ($raw.StartsWith("'") -and $raw.EndsWith("'"))) {
-                $raw = $raw.Substring(1, $raw.Length - 2)
-            }
-            return $raw
-        }
-    }
-    return $null
-}
-
 function Resolve-GitHubPatForHostClone {
     param([string]$DotEnvPath)
     foreach ($key in @("GITHUB_TOKEN", "GH_TOKEN")) {
-        $v = Get-DotEnvVariableValue -Path $DotEnvPath -VariableName $key
+        $v = Get-NornirDotEnvValue -Key $key -Paths @($DotEnvPath)
         if (-not [string]::IsNullOrWhiteSpace($v)) { return $v }
     }
     foreach ($key in @("GITHUB_TOKEN", "GH_TOKEN")) {
@@ -355,35 +320,26 @@ function Test-LocalDockerImage {
     return ($LASTEXITCODE -eq 0)
 }
 
-function Invoke-NornirWorkerBuild {
-    param([string]$Root)
-    Write-Host "Building from: $Root"
-    Push-Location $Root
-    try {
-        docker build -f nornir-docker/dev/Dockerfile `
-            --build-arg INSTALL_MONOREPO_EDITABLES=0 `
-            -t nornir:dev-cursor-base $Root
-        if ($LASTEXITCODE -ne 0) { throw "docker build nornir:dev-cursor-base failed" }
-        docker build -f nornir-docker/Dockerfile.cursor-worker `
-            --build-arg BASE_IMAGE=nornir:dev-cursor-base `
-            -t nornir:cursor-worker $Root
-        if ($LASTEXITCODE -ne 0) { throw "docker build nornir:cursor-worker failed" }
-    }
-    finally {
-        Pop-Location
-    }
-}
-
 if ($Rebuild) {
-    Invoke-NornirWorkerBuild -Root $RepoRoot
+    $buildExit = Invoke-NornirCursorWorkerImagesBuild -RepoRoot $RepoRoot
+    if ($buildExit -ne 0) { exit $buildExit }
 }
 elseif (-not (Test-LocalDockerImage -Ref $Image)) {
     Write-Host "Image '$Image' not found; building nornir:dev-cursor-base and worker..."
-    Invoke-NornirWorkerBuild -Root $RepoRoot
+    $buildExit = Invoke-NornirCursorWorkerImagesBuild -RepoRoot $RepoRoot
+    if ($buildExit -ne 0) { exit $buildExit }
 }
 
 if (-not $SkipEnvFile) {
-    Import-DotEnvFile -Path $script:envFile
+    Import-NornirDotEnvFile -Path $script:envFile
+}
+
+$useDevParityMounts = $DevParityMounts
+if (-not $useDevParityMounts -and (Test-Path -LiteralPath $script:envFile)) {
+    $parityFlag = Get-NornirDotEnvValue -Key 'NORNIR_WORKER_DEV_PARITY_MOUNTS' -Paths @($script:envFile)
+    if ($parityFlag -eq '1' -or [string]::Equals($parityFlag, 'true', [StringComparison]::OrdinalIgnoreCase)) {
+        $useDevParityMounts = $true
+    }
 }
 
 function Get-DockerWorkerEnvArgs {
@@ -540,6 +496,21 @@ else {
 
 $dockerArgs += $volumeArgs
 $dockerArgs += @("-w", "/workspace")
+
+if ($useDevParityMounts) {
+    $dockerUserRoot = $env:NORNIR_DOCKER_USER_ROOT
+    if ([string]::IsNullOrWhiteSpace($dockerUserRoot)) { $dockerUserRoot = 'D:\Docker' }
+    $parity = Add-NornirDevParityDockerRunArgs -ScriptsRepoRoot $RepoRoot -DockerUserRoot $dockerUserRoot
+    if ($parity.Enabled) {
+        $dockerArgs += $parity.DockerArgs
+        foreach ($note in $parity.Notes) {
+            Write-Host "  Dev parity: $note"
+        }
+    }
+    else {
+        Write-Warning "DevParityMounts requested but no mount sources found (configure Run/nornir-dev/.run.nornir-dev.env or nornir-docker/.env)."
+    }
+}
 
 if ($env:CURSOR_API_KEY) {
     $dockerArgs += @("-e", "CURSOR_API_KEY=$($env:CURSOR_API_KEY)")

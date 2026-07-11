@@ -14,9 +14,15 @@ services:
       - type: bind
         source: ${NORNIR_VOLUMES_HOST}
         target: /volumes
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST}
+        target: /storage4
 
   cursor-dev-clone:
     volumes:
       - type: bind
         source: ${NORNIR_VOLUMES_HOST}
         target: /volumes
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST}
+        target: /storage4

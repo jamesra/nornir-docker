@@ -42,8 +42,11 @@ RUN sed -i 's/\r$//' /usr/local/bin/cursor-worker-entry.sh \
 
 # Fallback when /workspace/nornir-docker is empty (e.g. nornir-docker git submodule not initialized after shallow clone).
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/lib/nornir-docker/cursor-dev-entry.sh
+COPY nornir-docker/mount-network-shares.sh /usr/local/lib/nornir-docker/mount-network-shares.sh
 RUN sed -i 's/\r$//' /usr/local/lib/nornir-docker/cursor-dev-entry.sh \
-    && chmod +x /usr/local/lib/nornir-docker/cursor-dev-entry.sh
+    && sed -i 's/\r$//' /usr/local/lib/nornir-docker/mount-network-shares.sh \
+    && chmod +x /usr/local/lib/nornir-docker/cursor-dev-entry.sh \
+       /usr/local/lib/nornir-docker/mount-network-shares.sh
 
 WORKDIR /workspace
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run nornir-build inside the Nornir Docker image (cwd mounted at /work).
+# Run nornir-build inside the Nornir Docker image (cwd mounted at /workspace).
 # Usage: ./nd-build.sh [--gpu] [args...]
 # Env: NORNIR_DOCKER_IMAGE (default nornir:dev), NORNIR_DOCKER_GPU=1, NORNIR_DOCKER_EXTRA_ARGS (space-separated docker run flags)
 
@@ -25,7 +25,16 @@ if [[ -n "${NORNIR_DOCKER_EXTRA_ARGS:-}" ]]; then
   DOCKER_RUN+=("${EXTRA[@]}")
 fi
 
-DOCKER_RUN+=(-v "${WORKDIR}:/work" -w /work "$IMAGE" nornir-build)
+# Publish to the dashboard broker when NORNIR_MQTT_HOST is set. Join the
+# dashboard network (default "nornir-docker_nornir") so the "mosquitto"
+# service name resolves; override with NORNIR_MQTT_NETWORK.
+if [[ -n "${NORNIR_MQTT_HOST:-}" ]]; then
+  DOCKER_RUN+=(-e "NORNIR_MQTT_HOST=${NORNIR_MQTT_HOST}")
+  DOCKER_RUN+=(-e "NORNIR_MQTT_PORT=${NORNIR_MQTT_PORT:-1883}")
+  DOCKER_RUN+=(--network "${NORNIR_MQTT_NETWORK:-nornir-docker_nornir}")
+fi
+
+DOCKER_RUN+=(-v "${WORKDIR}:/workspace" -w /workspace "$IMAGE" nornir-build)
 DOCKER_RUN+=("$@")
 
 exec "${DOCKER_RUN[@]}"

@@ -20,23 +20,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'NornirDockerRun.ps1')
+
 $image = if ($env:NORNIR_DOCKER_IMAGE) { $env:NORNIR_DOCKER_IMAGE } else { 'nornir:dev' }
 $work = (Get-Location).ProviderPath
 
 $runArgs = [System.Collections.ArrayList]@('run', '--rm', '-i')
-if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-    [void]$runArgs.Add('-t')
-}
-if ($Gpu -or $env:NORNIR_DOCKER_GPU -eq '1') {
-    [void]$runArgs.Add('--gpus')
-    [void]$runArgs.Add('all')
-}
-if ($env:NORNIR_DOCKER_EXTRA_ARGS) {
-    $extra = $env:NORNIR_DOCKER_EXTRA_ARGS.Trim() -split '\s+'
-    foreach ($x in $extra) {
-        if ($x) { [void]$runArgs.Add($x) }
-    }
-}
+Add-NornirDockerInteractiveTtyArgs -RunArgs $runArgs
+Add-NornirDockerGpuArgs -RunArgs $runArgs -Gpu:$Gpu
+Add-NornirDockerExtraRunArgs -RunArgs $runArgs
+Add-NornirDockerMqttRunArgs -RunArgs $runArgs
 [void]$runArgs.Add('-v')
 [void]$runArgs.Add("${work}:/workspace")
 [void]$runArgs.Add('-w')

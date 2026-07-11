@@ -18,8 +18,9 @@
 # at /legacycode. On WSL-only Compose, use /mnt/d/src/SVN/SCI/trunk instead.
 #
 # NAS Volumes: NORNIR_VOLUMES_HOST (WSL mount of \\192.168.0.199\Data\Volumes) is bind-mounted
-# at /volumes (read-write for build output). If unset, nornir-docker/dev/volumes-mount-placeholder is mounted.
-# Docker Desktop on Windows: use \\wsl.localhost\<Distro>\mnt\nornir-volumes (same style as NORNIR_TESTDATA_HOST).
+# at /volumes and /storage4 (same source; /storage4 is a legacy path alias). If unset,
+# nornir-docker/dev/volumes-mount-placeholder is mounted. Docker Desktop on Windows: use
+# \\wsl.localhost\<Distro>\mnt\nornir-volumes (same style as NORNIR_TESTDATA_HOST).
 #
 # On start, cursor-dev-entry.sh runs install-monorepo-editables.sh (pip install -e --no-deps from /workspace).
 #
@@ -95,6 +96,9 @@ services:
       - type: bind
         source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
         target: /volumes
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
+        target: /storage4
 
   cursor-dev-clone:
     <<: *cursor-dev-app
@@ -132,6 +136,9 @@ services:
       - type: bind
         source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
         target: /volumes
+      - type: bind
+        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
+        target: /storage4
 
 volumes:
   cursor-dev-work:

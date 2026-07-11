@@ -1,0 +1,13 @@
+# Template -> copy to D:\Docker\Run\nornir-dev\net-mounts\nas-mounts.tsv (not committed).
+# Mounted read-only into the container at /etc/nornir-net-mounts/nas-mounts.tsv.
+#
+# TAB-separated columns:  fstype <TAB> source <TAB> target <TAB> options
+#   fstype  : cifs | nfs4 (any fs whose driver is loaded in the shared WSL2 kernel)
+#   source  : //server/share/subdir (CIFS)  |  server:/export/path (NFS)
+#   target  : absolute mount point inside the container
+#   options : comma-separated mount -o options; uid/gid are appended automatically.
+#             CIFS lines reference a credentials file in the SEPARATE secrets bind
+#             at /run/secrets/net-creds/<id>.cred (no secret material lives in this file).
+#
+# fstype	source	target	options
+cifs	//192.168.0.199/Data/Volumes	/storage4	vers=3.1.1,rsize=4194304,wsize=4194304,cache=loose,actimeo=30,nostrictsync,iocharset=utf8,mfsymlinks,credentials=/run/secrets/net-creds/storage4.cred,multichannel,max_channels=4,actimeo=120,closetimeo=60,nobrl,noperm
