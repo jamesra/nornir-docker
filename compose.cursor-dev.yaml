@@ -99,6 +99,14 @@ services:
       - type: bind
         source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
         target: /storage4
+      - type: bind
+        source: ./cursor-dev-entry.sh
+        target: /usr/local/bin/cursor-dev-entry.sh
+        read_only: true
+      - type: bind
+        source: ./install-monorepo-editables.sh
+        target: /usr/local/bin/install-monorepo-editables.sh
+        read_only: true
 
   cursor-dev-clone:
     <<: *cursor-dev-app
@@ -108,6 +116,7 @@ services:
       NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
       NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
       NORNIR_WORKSPACE_STRATEGY: clone
+      NORNIR_CLONE_DEPTH: "0"
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
       NORNIR_IMPORT_CACHE_PATH: ${NORNIR_IMPORT_CACHE_PATH:-/tmp/nornir-test-output/ImportCache}
@@ -139,6 +148,14 @@ services:
       - type: bind
         source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
         target: /storage4
+      - type: bind
+        source: ./cursor-dev-entry.sh
+        target: /usr/local/bin/cursor-dev-entry.sh
+        read_only: true
+      - type: bind
+        source: ./install-monorepo-editables.sh
+        target: /usr/local/bin/install-monorepo-editables.sh
+        read_only: true
 
 volumes:
   cursor-dev-work:

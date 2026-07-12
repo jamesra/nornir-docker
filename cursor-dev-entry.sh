@@ -28,7 +28,7 @@ apply_network_shares() {
 
 install_editables() {
   local script="/usr/local/bin/install-monorepo-editables.sh"
-  if [[ ! -x "${script}" ]]; then
+  if [[ ! -f "${script}" ]]; then
     script="/workspace/nornir-docker/install-monorepo-editables.sh"
   fi
   if [[ ! -f "${script}" ]]; then
@@ -70,10 +70,50 @@ workspace_nonempty() {
   [[ -n "$(ls -A /workspace 2>/dev/null || true)" ]]
 }
 
+configure_git_for_submodules() {
+  local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  if [[ -n "${token}" ]]; then
+    git config --global url."https://x-access-token:${token}@github.com/".insteadOf "https://github.com/"
+    git config --global url."https://x-access-token:${token}@github.com/".insteadOf "git@github.com:"
+  else
+    git config --global url."https://github.com/".insteadOf "git@github.com:" 2>/dev/null || true
+  fi
+}
+
+repair_broken_submodule_gitdirs() {
+  [[ -d /workspace/.git ]] || return 0
+  cd /workspace || return 0
+  local path mod_git
+  while IFS= read -r path; do
+    [[ -n "${path}" ]] || continue
+    mod_git=".git/modules/${path}"
+    if [[ -f "${path}/.git" ]] && grep -qF "${mod_git}" "${path}/.git" 2>/dev/null; then
+      if [[ ! -e "${mod_git}/HEAD" ]]; then
+        echo "cursor-dev-entry: repairing broken submodule metadata for ${path}" >&2
+        git submodule deinit -f "${path}" 2>/dev/null || true
+        rm -rf "${mod_git}" 2>/dev/null || true
+      fi
+    fi
+  done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | awk '{print $2}')
+}
+
+sync_submodules_best_effort() {
+  configure_git_for_submodules
+  git submodule sync --recursive 2>/dev/null || true
+  if ! git submodule update --init --recursive 2>/dev/null; then
+    echo "cursor-dev-entry: warning: submodule update had errors (private repos may need GITHUB_TOKEN in the container env)." >&2
+  fi
+}
+
 clone_shallow_or_full() {
+  configure_git_for_submodules
   local d="${NORNIR_CLONE_DEPTH:-1}"
+  if [[ "${WORKSPACE_STRATEGY}" == "clone" && "${d}" != "0" && "${d}" != "full" ]]; then
+    d="0"
+    echo "cursor-dev-entry: cursor-dev-clone uses full clone depth for submodule checkout (NORNIR_CLONE_DEPTH=0)." >&2
+  fi
   if [[ "${d}" == "0" || "${d}" == "full" ]]; then
-    git clone --branch "${NORNIR_CLONE_BRANCH}" "${NORNIR_CLONE_URL}" /workspace
+    git clone --recurse-submodules --branch "${NORNIR_CLONE_BRANCH}" "${NORNIR_CLONE_URL}" /workspace
   else
     git clone --depth "${d}" --branch "${NORNIR_CLONE_BRANCH}" "${NORNIR_CLONE_URL}" /workspace
   fi
@@ -86,6 +126,7 @@ ensure_clone_strategy() {
 
   if [[ -d /workspace/.git ]]; then
     cd /workspace
+    repair_broken_submodule_gitdirs
     git fetch --prune origin
     git checkout "${NORNIR_CLONE_BRANCH}"
     git pull --ff-only origin "${NORNIR_CLONE_BRANCH}" || {
@@ -102,8 +143,7 @@ ensure_clone_strategy() {
     cd /workspace
   fi
 
-  git submodule sync --recursive 2>/dev/null || true
-  git submodule update --init --recursive 2>/dev/null || true
+  sync_submodules_best_effort
 }
 
 prepare_mounted_workspace() {
@@ -114,12 +154,12 @@ prepare_mounted_workspace() {
     fi
     clone_shallow_or_full
     cd /workspace
-    git submodule sync --recursive 2>/dev/null || true
-    git submodule update --init --recursive 2>/dev/null || true
+    sync_submodules_best_effort
     return 0
   fi
 
   cd /workspace
+  repair_broken_submodule_gitdirs
   git fetch --prune origin
 
   if [[ "${NORNIR_SYNC_REMOTE:-}" == "1" ]]; then
@@ -130,8 +170,7 @@ prepare_mounted_workspace() {
     }
   fi
 
-  git submodule sync --recursive 2>/dev/null || true
-  git submodule update --init --recursive 2>/dev/null || true
+  sync_submodules_best_effort
 }
 
 if [[ "${WORKSPACE_STRATEGY}" == "clone" ]]; then
