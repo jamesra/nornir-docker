@@ -54,4 +54,20 @@ Headless images use ``pip install cupy-cuda13x`` (or another ``cupy-cudaNx`` whe
 
 Compose can set ``NVIDIA_CUDA_APT_VERSION`` via environment (see ``compose.yaml`` and ``compose.cursor-dev.yaml`` ``build.args``).
 
+## Build dashboard (MQTT)
+
+``compose.dashboard.yaml`` starts a shared Mosquitto broker and the
+``nornir-dashboard`` web UI (port **8087**). From the monorepo root:
+
+```bash
+docker compose -f nornir-docker/compose.dashboard.yaml up -d
+# open http://127.0.0.1:8087
+```
+
+Point ``nornir-build`` at the broker with ``NORNIR_MQTT_HOST`` /
+``NORNIR_MQTT_PORT``. The broker publishes host port ``1883`` on
+``NORNIR_MQTT_BIND_HOST`` (default ``0.0.0.0``); only expose that port on a
+trusted network because authentication is anonymous. See
+``nornir-builddashboard/README.md`` and ``nornir-shared/README_MQTT.md``.
+
 When CuPy adds a new ``cupy-cudaNx`` default, bump ``CUPY_PACKAGE`` and ``NVIDIA_CUDA_APT_VERSION`` together and confirm all four package families exist on NVIDIA’s Debian 12 index for that suffix.

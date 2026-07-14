@@ -1,0 +1,46 @@
+# Mosquitto + Nornir build dashboard stack.
+#
+# From the monorepo root (parent of nornir-docker):
+#   docker compose -f nornir-docker/compose.dashboard.yaml up -d
+# then open http://127.0.0.1:8087
+#
+# Point builds at the shared broker:
+#   export NORNIR_MQTT_HOST=<this-host-or-mosquitto>
+#   export NORNIR_MQTT_PORT=1883
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    ports:
+      - "${NORNIR_MQTT_BIND_HOST:-0.0.0.0}:1883:1883"
+
+  nornir-dashboard:
+    build:
+      context: ../nornir-builddashboard
+      dockerfile: Dockerfile
+    image: nornir-dashboard:latest
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    environment:
+      NORNIR_MQTT_HOST: mosquitto
+      NORNIR_MQTT_PORT: "1883"
+      NORNIR_MQTT_RUN_TOPIC_ROOT: nornir/run
+      NORNIR_DASHBOARD_HOST: "0.0.0.0"
+      NORNIR_DASHBOARD_PORT: "8087"
+      NORNIR_DASHBOARD_DB: /data/nornir-dashboard.db
+      NORNIR_DASHBOARD_MAX_EVENTS: "${NORNIR_DASHBOARD_MAX_EVENTS:-5000}"
+      NORNIR_DASHBOARD_STALE_AFTER: "${NORNIR_DASHBOARD_STALE_AFTER:-600}"
+      NORNIR_DASHBOARD_RETENTION_DAYS: "${NORNIR_DASHBOARD_RETENTION_DAYS:-30}"
+    ports:
+      - "${NORNIR_DASHBOARD_BIND_HOST:-127.0.0.1}:8087:8087"
+    volumes:
+      - dashboard-data:/data
+
+volumes:
+  mosquitto-data:
+  dashboard-data:
