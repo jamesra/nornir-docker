@@ -74,6 +74,11 @@ services:
       NORNIR_LOG_ROOT: /workspace/.nornir-logs
       NORNIR_HEADLESS: 1
       INPUT_NORNIR_DATA: /data
+      # Publish build telemetry to the shared dashboard broker (compose.dashboard.yaml).
+      # host.docker.internal reaches the host-published Mosquitto port from the container.
+      NORNIR_MQTT_HOST: ${NORNIR_MQTT_HOST:-host.docker.internal}
+      NORNIR_MQTT_PORT: ${NORNIR_MQTT_PORT:-1883}
+      NORNIR_MQTT_ENABLE: ${NORNIR_MQTT_ENABLE:-1}
     volumes:
       - type: bind
         source: ${NORNIR_WORKSPACE_HOST:-..}
@@ -123,6 +128,9 @@ services:
       NORNIR_LOG_ROOT: /workspace/.nornir-logs
       NORNIR_HEADLESS: 1
       INPUT_NORNIR_DATA: /data
+      NORNIR_MQTT_HOST: ${NORNIR_MQTT_HOST:-host.docker.internal}
+      NORNIR_MQTT_PORT: ${NORNIR_MQTT_PORT:-1883}
+      NORNIR_MQTT_ENABLE: ${NORNIR_MQTT_ENABLE:-1}
     volumes:
       - type: volume
         source: cursor-dev-work

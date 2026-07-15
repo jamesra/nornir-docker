@@ -26,12 +26,12 @@ if [[ -n "${NORNIR_DOCKER_EXTRA_ARGS:-}" ]]; then
 fi
 
 # Publish to the dashboard broker when NORNIR_MQTT_HOST is set. Join the
-# dashboard network (default "nornir-docker_nornir") so the "mosquitto"
-# service name resolves; override with NORNIR_MQTT_NETWORK.
+# dashboard network (default "nornir-docker_default" from compose.dashboard.yaml)
+# so the "mosquitto" service name resolves; override with NORNIR_MQTT_NETWORK.
 if [[ -n "${NORNIR_MQTT_HOST:-}" ]]; then
   DOCKER_RUN+=(-e "NORNIR_MQTT_HOST=${NORNIR_MQTT_HOST}")
   DOCKER_RUN+=(-e "NORNIR_MQTT_PORT=${NORNIR_MQTT_PORT:-1883}")
-  DOCKER_RUN+=(--network "${NORNIR_MQTT_NETWORK:-nornir-docker_nornir}")
+  DOCKER_RUN+=(--network "${NORNIR_MQTT_NETWORK:-nornir-docker_default}")
 fi
 
 DOCKER_RUN+=(-v "${WORKDIR}:/workspace" -w /workspace "$IMAGE" nornir-build)
