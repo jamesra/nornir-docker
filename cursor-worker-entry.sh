@@ -6,6 +6,8 @@
 # Override: docker run ... nornir:cursor-worker -- bash -lc '...'
 set -euo pipefail
 
+ulimit -n 65536 2>/dev/null || true
+
 export GIT_TERMINAL_PROMPT=0
 
 WORKSPACE=/workspace

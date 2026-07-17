@@ -7,8 +7,15 @@
 # Run nornir-build with your data directory mounted (example):
 #   docker compose -f nornir-docker/compose.yaml run --rm -v "%CD%:/workspace" -w /workspace nornir nornir-build --help
 
+x-nornir-ulimits: &nornir-ulimits
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+
 services:
   nornir:
+    <<: *nornir-ulimits
     shm_size: "64gb"
     build:
       context: ..
@@ -26,6 +33,7 @@ services:
     image: nornir:dev
 
   nornir-prod:
+    <<: *nornir-ulimits
     shm_size: "64gb"
     build:
       context: ..
@@ -41,6 +49,7 @@ services:
     image: nornir:prod
 
   nornir-cupy:
+    <<: *nornir-ulimits
     shm_size: "64gb"
     build:
       context: ..

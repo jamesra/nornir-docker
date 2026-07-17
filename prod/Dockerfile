@@ -67,8 +67,11 @@ RUN apt-get purge -y build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
+# cifs-utils / nfs-common: in-container NAS mounts (NORNIR_NET_MOUNTS=1; path-B, CAP_SYS_ADMIN at run)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends mosquitto mosquitto-clients \
+    && apt-get install -y --no-install-recommends \
+        mosquitto mosquitto-clients \
+        cifs-utils nfs-common keyutils \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
@@ -111,5 +114,12 @@ RUN chmod +x /tmp/install-monorepo-editables.sh \
 # Optional repro corpus mount point when run with a /data bind (INPUT_NORNIR_DATA).
 RUN mkdir -p /data
 
+COPY nornir-docker/mount-network-shares.sh /usr/local/bin/mount-network-shares.sh
+COPY nornir-docker/prod-entry.sh /usr/local/bin/prod-entry.sh
+RUN sed -i 's/\r$//' /usr/local/bin/mount-network-shares.sh \
+    && sed -i 's/\r$//' /usr/local/bin/prod-entry.sh \
+    && chmod +x /usr/local/bin/mount-network-shares.sh /usr/local/bin/prod-entry.sh
+
 WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/prod-entry.sh"]
 CMD ["bash"]

@@ -1,4 +1,5 @@
-# Template -> copy to D:\Docker\Run\nornir-dev\net-mounts\nas-mounts.tsv (not committed).
+# Template -> copy to <NORNIR_DOCKER_USER_ROOT>\Run\nornir-net-mounts\net-mounts\nas-mounts.tsv (not committed).
+# Shared by start-nornir-build, cursor-dev net mounts, and worker -DevParityMounts.
 # Mounted read-only into the container at /etc/nornir-net-mounts/nas-mounts.tsv.
 #
 # TAB-separated columns:  fstype <TAB> source <TAB> target <TAB> options

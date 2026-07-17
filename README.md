@@ -20,6 +20,8 @@ Full operational documentation lives in the **Nornir monodoc**:
 - **nd-build:** <https://nornir.github.io/docker/nd_build.html>
 - **Cursor dev shell:** <https://nornir.github.io/docker/cursor_dev.html>
 - **Cursor worker:** <https://nornir.github.io/docker/cursor_worker.html>
+- **Production appliance deploy:** <https://nornir.github.io/docker/remote_deployment.html>
+- **Co-located dashboard:** <https://nornir.github.io/docker/dashboard.html>
 - **Windows D:\ layout:** <https://nornir.github.io/docker/windows_cursor_layout.html>
 
 ## Scripts (short)
@@ -27,6 +29,11 @@ Full operational documentation lives in the **Nornir monodoc**:
 | Script | Phase | Purpose |
 |--------|--------|---------|
 | ``docker-build.ps1`` / ``build.cmd`` | Build | All images with OCI labels + BOM JSON from **monorepo root**. Optional build-args from **invocation directory** only: ``build.env`` then ``.build.<id>.env`` per image; logs each path as merged or not found (see script header). Committed ``example.*.build.env`` are templates, not read by the script. |
+| ``docker-push.ps1`` | Publish | Tag/push ``nornir:dev``, ``dev-cursor-base``, ``prod``, ``cupy`` (and optional ``nornir-dashboard``) to ``ghcr.io``. |
+| ``Initialize-NornirBuildAppliance.ps1`` | Run | One-shot layout + templates + GHCR pull + co-located dashboard for the build appliance. |
+| ``start-nornir-build.ps1`` | Run | Everyday appliance shell: unique workspace, path-B CIFS from ``Run\nornir-net-mounts``, GPU image pick. |
+| ``start-dashboard.ps1`` | Run | Restart Mosquitto + ``nornir-dashboard`` (``compose.dashboard.yaml``). |
+| ``Test-NornirGpu.ps1`` | Run | Probe ``--gpus all`` and set ``NORNIR_DOCKER_GPU``. |
 | ``run-cursor-dev.ps1`` | Run | ``docker compose … run`` for **cursor-dev** (bind-mounted repo) or **cursor-dev-clone** with ``-Clone``; optional ``-Gpu``. Auto-includes ``$NORNIR_DOCKER_USER_ROOT/Run/nornir-dev/compose.volumes.override.yaml`` when present. Requires ``nornir-docker/.env`` or ``NORNIR_TESTDATA_HOST`` (template: ``dev/example.cursor-dev.run.env``). Optional ``NORNIR_REPRO_DATA_HOST`` mounts repro data at ``/data`` with ``INPUT_NORNIR_DATA=/data``. Test output defaults to ``D:/nornir-test-output`` → ``/tmp/nornir-test-output`` (override with ``NORNIR_TESTOUTPUT_HOST``). |
 | ``start-sample.ps1`` | Mixed | Samples: **Build** → ``docker-build.ps1``; **CursorDev** → ``run-cursor-dev.ps1``; **NornirBuild** → compose ``nornir-build``. |
 | ``nd-build.ps1`` / ``nd-build.cmd`` | Run | Run ``nornir-build`` in a container with cwd mounted at ``/workspace``. |
@@ -42,6 +49,10 @@ docker build -f nornir-docker/prod/Dockerfile -t nornir:prod .
 ```
 
 For full build options (OCI labels, BOM JSON), use ``docker-build.ps1`` or ``build.cmd`` in ``nornir-docker/``, or run ``.\nornir-docker\start-sample.ps1 -Sample Build`` from the repo root.
+
+## Open file limits (tile builds on NAS/CIFS)
+
+Compose stacks and ``docker run`` launchers set ``nofile`` soft/hard **65536** so long ``AssembleTiles`` runs on CIFS do not hit ``EMFILE``. Verify inside a container with ``ulimit -n``. Override with ``NORNIR_DOCKER_NOFILE_SOFT`` / ``NORNIR_DOCKER_NOFILE_HARD`` for ``docker run`` helpers.
 
 ## CUDA runtime in dev / prod images (GPU)
 

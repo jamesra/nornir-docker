@@ -28,6 +28,7 @@ $work = (Get-Location).ProviderPath
 $runArgs = [System.Collections.ArrayList]@('run', '--rm', '-i')
 Add-NornirDockerInteractiveTtyArgs -RunArgs $runArgs
 Add-NornirDockerGpuArgs -RunArgs $runArgs -Gpu:$Gpu
+Add-NornirDockerUlimitArgs -RunArgs $runArgs
 Add-NornirDockerExtraRunArgs -RunArgs $runArgs
 Add-NornirDockerMqttRunArgs -RunArgs $runArgs
 [void]$runArgs.Add('-v')

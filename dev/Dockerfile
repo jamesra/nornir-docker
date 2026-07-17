@@ -95,6 +95,7 @@ RUN pip install --no-cache-dir -r /tmp/constraints-headless.txt \
     && rm -f /tmp/constraints-headless.txt
 
 RUN pip install --no-cache-dir "${CUPY_PACKAGE}"
+RUN pip install psutil
 
 # Cursor worker builds with INSTALL_MONOREPO_EDITABLES=0: venv + CuPy only; packages come from /workspace (cursor-dev-entry.sh).
 ARG INSTALL_MONOREPO_EDITABLES=1

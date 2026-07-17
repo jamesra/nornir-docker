@@ -18,11 +18,15 @@
 # GPU (optional):
 #   docker compose -f nornir-docker/compose.cursor-worker.yaml run --rm --gpus all nornir-cursor-worker
 
-include:
-  - path: compose.yaml
+x-nornir-ulimits: &nornir-ulimits
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
 
 services:
   nornir-cursor-base:
+    <<: *nornir-ulimits
     deploy:
       resources:
         reservations:
@@ -47,6 +51,7 @@ services:
     image: nornir:dev-cursor-base
 
   nornir-cursor-worker:
+    <<: *nornir-ulimits
     build:
       context: ..
       dockerfile: nornir-docker/Dockerfile.cursor-worker

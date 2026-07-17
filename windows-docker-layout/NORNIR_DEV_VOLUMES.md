@@ -1,6 +1,11 @@
-# NAS volumes and in-container CIFS for cursor-dev (machine-local)
+# NAS volumes and in-container CIFS (machine-local)
 
-Per the **docker-machine-layout** rule, **runtime** Docker config lives under **`D:\Docker\Run\nornir-dev\`**. Committed **templates** live under `nornir-docker/dev/example.*`.
+**Preferred shared layout (all roles):** `<NORNIR_DOCKER_USER_ROOT>\Run\nornir-net-mounts\`  
+(default root `C:\Docker` when `NORNIR_DOCKER_USER_ROOT` is unset). Used by **`start-nornir-build.ps1`**, cursor-dev net mounts, and worker `-DevParityMounts`.
+
+Legacy programmer-only path `Run\nornir-dev\` still works as a fallback. Migrate by copying `net-mounts\`, `secrets\net-creds\`, and pointing env at the new tree (see `Initialize-NornirBuildAppliance.ps1`).
+
+Committed **templates** live under `nornir-docker/dev/example.*` and `nornir-docker/example.nornir-net-mounts.run.env`.
 
 There are **two** ways to see NAS data in the container:
 

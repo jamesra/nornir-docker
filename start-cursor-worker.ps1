@@ -139,6 +139,7 @@ $ErrorActionPreference = "Continue"
 . (Join-Path $PSScriptRoot "NornirDotEnv.ps1")
 . (Join-Path $PSScriptRoot "NornirDevRunMounts.ps1")
 . (Join-Path $PSScriptRoot "NornirDockerBuild.ps1")
+. (Join-Path $PSScriptRoot "NornirDockerRun.ps1")
 
 function Set-CursorWorkerWindowTitle {
     param(
@@ -442,10 +443,12 @@ if ($SmokeTest) {
     $smokeName = "nornir-cursor-worker-smoke"
     docker rm -f $smokeName 2>$null | Out-Null
     Write-Host "Smoke test: agent --version, then sleep 30s"
-    $smokeArgs = @(
+    $smokeArgs = [System.Collections.ArrayList]@(
         "run", "--rm", "--name", $smokeName,
         "--entrypoint", "/bin/sh"
-    ) + (Get-DockerWorkerEnvArgs -DotEnvPath $script:envFile) + @(
+    )
+    Add-NornirDockerUlimitArgs -RunArgs $smokeArgs
+    $smokeArgs += (Get-DockerWorkerEnvArgs -DotEnvPath $script:envFile) + @(
         "-e", "HOME=/root",
         "-e", "NORNIR_WORKSPACE_STRATEGY=mounted"
     ) + $volumeArgs + @(
@@ -456,7 +459,9 @@ if ($SmokeTest) {
     exit $LASTEXITCODE
 }
 
-$dockerArgs = @("run") + (Get-DockerWorkerEnvArgs -DotEnvPath $script:envFile) + @("-e", "HOME=/root")
+$dockerArgs = [System.Collections.ArrayList]@("run")
+Add-NornirDockerUlimitArgs -RunArgs $dockerArgs
+$dockerArgs += (Get-DockerWorkerEnvArgs -DotEnvPath $script:envFile) + @("-e", "HOME=/root")
 
 if ($KeepContainer) {
     if ($ReplaceExistingContainer) {

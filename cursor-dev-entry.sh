@@ -7,6 +7,8 @@
 # NORNIR_NET_MOUNTS=1: apply /etc/nornir-net-mounts/nas-mounts.tsv (CIFS/NFS) via mount-network-shares.sh.
 set -euo pipefail
 
+ulimit -n 65536 2>/dev/null || true
+
 export GIT_TERMINAL_PROMPT=0
 
 apply_network_shares() {

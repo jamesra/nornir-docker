@@ -11,12 +11,29 @@ function Add-NornirDockerInteractiveTtyArgs {
 function Add-NornirDockerGpuArgs {
     param(
         [System.Collections.IList]$RunArgs,
-        [bool]$Gpu = $false
+        [bool]$Gpu = $false,
+        [switch]$ForceGpuFlagOnly
     )
+    # When -ForceGpuFlagOnly, honor only the explicit $Gpu switch (callers that already resolved GPU).
+    if ($ForceGpuFlagOnly) {
+        if ($Gpu) {
+            [void]$RunArgs.Add('--gpus')
+            [void]$RunArgs.Add('all')
+        }
+        return
+    }
     if ($Gpu -or $env:NORNIR_DOCKER_GPU -eq '1') {
         [void]$RunArgs.Add('--gpus')
         [void]$RunArgs.Add('all')
     }
+}
+
+function Add-NornirDockerUlimitArgs {
+    param([System.Collections.IList]$RunArgs)
+    $soft = if ($env:NORNIR_DOCKER_NOFILE_SOFT) { $env:NORNIR_DOCKER_NOFILE_SOFT } else { '65536' }
+    $hard = if ($env:NORNIR_DOCKER_NOFILE_HARD) { $env:NORNIR_DOCKER_NOFILE_HARD } else { '65536' }
+    [void]$RunArgs.Add('--ulimit')
+    [void]$RunArgs.Add("nofile=${soft}:${hard}")
 }
 
 function Add-NornirDockerExtraRunArgs {
