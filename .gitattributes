@@ -1,0 +1,13 @@
+# Force LF line endings for files that are executed inside Linux containers.
+# Without this, core.autocrlf=true on Windows checks out CRLF, which breaks
+# bash shebangs and set -o pipefail inside Docker bind-mounted scripts.
+*.sh        text eol=lf
+Dockerfile* text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.conf      text eol=lf
+*.env       text eol=lf
+*.txt       text eol=lf
+*.py        text eol=lf
+*.rst       text eol=lf
+*.md        text eol=lf

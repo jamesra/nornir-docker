@@ -1,7 +1,13 @@
 # Mosquitto + Nornir build dashboard stack.
 #
+# Stable project name keeps volumes/networks consistent whether you run from
+# nornir-docker/ or the monorepo root (avoids an empty SQLite / second broker).
+name: nornir-dashboard
+#
 # From the monorepo root (parent of nornir-docker):
-#   docker compose -f nornir-docker/compose.dashboard.yaml up -d
+#   .\nornir-docker\start-dashboard.ps1
+#   .\nornir-docker\start-dashboard.ps1 -Rebuild   # rebuild image + recreate container
+#   docker compose -f nornir-docker/compose.dashboard.yaml up -d --build
 # then open http://127.0.0.1:8087
 #
 # Point builds at the shared broker:

@@ -32,7 +32,7 @@ Full operational documentation lives in the **Nornir monodoc**:
 | ``docker-push.ps1`` | Publish | Tag/push ``nornir:dev``, ``dev-cursor-base``, ``prod``, ``cupy`` (and optional ``nornir-dashboard``) to ``ghcr.io``. |
 | ``Initialize-NornirBuildAppliance.ps1`` | Run | One-shot layout + templates + GHCR pull + co-located dashboard for the build appliance. |
 | ``start-nornir-build.ps1`` | Run | Everyday appliance shell: unique workspace, path-B CIFS from ``Run\nornir-net-mounts``, GPU image pick. |
-| ``start-dashboard.ps1`` | Run | Restart Mosquitto + ``nornir-dashboard`` (``compose.dashboard.yaml``). |
+| ``start-dashboard.ps1`` | Run | Start/restart Mosquitto + ``nornir-dashboard`` (``compose.dashboard.yaml``). Use ``-Rebuild`` (optional ``-NoCache``) to rebuild the dashboard image from ``nornir-builddashboard`` and recreate the container when deploying local UI/backend changes. |
 | ``Test-NornirGpu.ps1`` | Run | Probe ``--gpus all`` and set ``NORNIR_DOCKER_GPU``. |
 | ``run-cursor-dev.ps1`` | Run | ``docker compose … run`` for **cursor-dev** (bind-mounted repo) or **cursor-dev-clone** with ``-Clone``; optional ``-Gpu``. Auto-includes ``$NORNIR_DOCKER_USER_ROOT/Run/nornir-dev/compose.volumes.override.yaml`` when present. Requires ``nornir-docker/.env`` or ``NORNIR_TESTDATA_HOST`` (template: ``dev/example.cursor-dev.run.env``). Optional ``NORNIR_REPRO_DATA_HOST`` mounts repro data at ``/data`` with ``INPUT_NORNIR_DATA=/data``. Test output defaults to ``D:/nornir-test-output`` → ``/tmp/nornir-test-output`` (override with ``NORNIR_TESTOUTPUT_HOST``). |
 | ``start-sample.ps1`` | Mixed | Samples: **Build** → ``docker-build.ps1``; **CursorDev** → ``run-cursor-dev.ps1``; **NornirBuild** → compose ``nornir-build``. |
@@ -70,9 +70,17 @@ Compose can set ``NVIDIA_CUDA_APT_VERSION`` via environment (see ``compose.yaml`
 ``compose.dashboard.yaml`` starts a shared Mosquitto broker and the
 ``nornir-dashboard`` web UI (port **8087**). From the monorepo root:
 
-```bash
-docker compose -f nornir-docker/compose.dashboard.yaml up -d
+```powershell
+.\nornir-docker\start-dashboard.ps1
+# deploy local nornir-builddashboard changes during testing:
+.\nornir-docker\start-dashboard.ps1 -Rebuild
 # open http://127.0.0.1:8087
+```
+
+Or raw Compose:
+
+```bash
+docker compose -f nornir-docker/compose.dashboard.yaml up -d --build
 ```
 
 Point ``nornir-build`` at the broker with ``NORNIR_MQTT_HOST`` /

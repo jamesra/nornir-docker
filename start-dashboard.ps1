@@ -1,10 +1,17 @@
 <#
 .SYNOPSIS
-  Start or restart the co-located Mosquitto + nornir-dashboard stack.
+  Start, restart, or rebuild the co-located Mosquitto + nornir-dashboard stack.
 
 .DESCRIPTION
-  Runs docker compose -f compose.dashboard.yaml up -d from nornir-docker.
-  Loads dashboard.run.env from Run\nornir-dashboard when present (localhost binds).
+  Runs docker compose -f compose.dashboard.yaml for the fixed project name
+  ``nornir-dashboard`` (stable volumes/networks across cwd). Loads
+  dashboard.run.env from Run\nornir-dashboard when present (localhost binds).
+
+  Use -Rebuild when deploying local nornir-builddashboard code changes during
+  testing: rebuilds the nornir-dashboard image and recreates only that
+  container (Mosquitto is left running so retained run meta stays available).
+  Hard-refresh the browser after -Rebuild; the UI also reloads /api/runs when
+  the WebSocket reconnects.
 
 .PARAMETER DockerUserRoot
   Machine-local Docker root. Default: NORNIR_DOCKER_USER_ROOT or C:\Docker.
@@ -14,17 +21,34 @@
 
 .PARAMETER Down
   Run compose down instead of up -d.
+
+.PARAMETER Rebuild
+  Rebuild the nornir-dashboard image and force-recreate the dashboard container
+  without restarting Mosquitto (retained MQTT meta for live runs is preserved).
+
+.PARAMETER NoCache
+  With -Rebuild, pass ``--no-cache`` to ``docker compose build`` before up so
+  every layer is rebuilt (slower; use when layer cache hides code changes).
 #>
 param(
     [string]$DockerUserRoot = '',
     [string]$RepoRoot = '',
-    [switch]$Down
+    [switch]$Down,
+    [switch]$Rebuild,
+    [switch]$NoCache
 )
 
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'NornirDevRunMounts.ps1')
 . (Join-Path $PSScriptRoot 'NornirDotEnv.ps1')
+
+if ($NoCache -and -not $Rebuild) {
+    Write-Error '-NoCache requires -Rebuild.'
+}
+if ($Down -and $Rebuild) {
+    Write-Error 'Use either -Down or -Rebuild, not both.'
+}
 
 $DockerUserRoot = Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
@@ -35,6 +59,9 @@ $composeFile = Join-Path $PSScriptRoot 'compose.dashboard.yaml'
 if (-not (Test-Path -LiteralPath $composeFile)) {
     Write-Error "Missing $composeFile"
 }
+
+# Keep volumes/networks stable regardless of invocation directory.
+$ComposeProject = 'nornir-dashboard'
 
 $runEnv = Join-Path $DockerUserRoot 'Run\nornir-dashboard\dashboard.run.env'
 if (Test-Path -LiteralPath $runEnv) {
@@ -51,29 +78,79 @@ if (Test-Path -LiteralPath $runEnv) {
     $envFiles += $runEnv
 }
 
+function Invoke-DashboardCompose {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$ComposeArgs
+    )
+    # Native docker compose stdout must not enter the PowerShell pipeline: assigning
+    # $code = Invoke-DashboardCompose ... would capture log lines, and ($code -ne 0)
+    # would then look like a failure even when the exit code was 0.
+    & docker compose -p $ComposeProject -f $composeFile @envFiles @ComposeArgs | Out-Host
+    return [int]$LASTEXITCODE
+}
+
+function Test-DashboardHttp {
+    try {
+        $probe = Invoke-WebRequest -Uri 'http://127.0.0.1:8087/' -UseBasicParsing -TimeoutSec 3
+        return ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 500)
+    }
+    catch {
+        return $false
+    }
+}
+
 Push-Location $PSScriptRoot
 try {
     if ($Down) {
-        & docker compose -f $composeFile @envFiles down
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "docker compose failed (exit $LASTEXITCODE)"
+        $code = Invoke-DashboardCompose -ComposeArgs @('down')
+        if ($code -ne 0) {
+            Write-Error "docker compose failed (exit $code)"
         }
     }
     else {
-        & docker compose -f $composeFile @envFiles up -d
-        if ($LASTEXITCODE -ne 0) {
-            # Host mosquitto (or another stack) may already own :1883; dashboard UI alone is enough.
-            try {
-                $probe = Invoke-WebRequest -Uri 'http://127.0.0.1:8087/' -UseBasicParsing -TimeoutSec 3
-                if ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 500) {
-                    Write-Warning "compose up failed (exit $LASTEXITCODE), but dashboard already responds on :8087 — continuing"
+        if ($Rebuild) {
+            $buildArgs = @('build', 'nornir-dashboard')
+            if ($NoCache) {
+                $buildArgs = @('build', '--no-cache', 'nornir-dashboard')
+                Write-Host 'Rebuilding nornir-dashboard image (no cache)...'
+            }
+            else {
+                Write-Host 'Rebuilding nornir-dashboard image...'
+            }
+            $code = Invoke-DashboardCompose -ComposeArgs $buildArgs
+            if ($code -ne 0) {
+                Write-Error "docker compose build failed (exit $code)"
+            }
+
+            # Ensure broker is up without recreating it (keeps retained run meta).
+            Write-Host 'Ensuring Mosquitto is up...'
+            $null = Invoke-DashboardCompose -ComposeArgs @('up', '-d', 'mosquitto')
+
+            # Recreate only the dashboard so it loads the new image and re-subscribes.
+            Write-Host 'Recreating nornir-dashboard container (Mosquitto left running)...'
+            $code = Invoke-DashboardCompose -ComposeArgs @(
+                'up', '-d', '--force-recreate', '--no-deps', 'nornir-dashboard'
+            )
+            if ($code -ne 0) {
+                if (Test-DashboardHttp) {
+                    Write-Warning "compose recreate failed (exit $code), but dashboard already responds on :8087 — continuing"
                 }
                 else {
-                    Write-Error "docker compose failed (exit $LASTEXITCODE)"
+                    Write-Error "docker compose failed (exit $code)"
                 }
             }
-            catch {
-                Write-Error "docker compose failed (exit $LASTEXITCODE): $($_.Exception.Message)"
+        }
+        else {
+            $code = Invoke-DashboardCompose -ComposeArgs @('up', '-d')
+            if ($code -ne 0) {
+                # Host mosquitto (or another stack) may already own :1883; dashboard UI alone is enough.
+                if (Test-DashboardHttp) {
+                    Write-Warning "compose up failed (exit $code), but dashboard already responds on :8087 — continuing"
+                }
+                else {
+                    Write-Error "docker compose failed (exit $code)"
+                }
             }
         }
     }
@@ -85,4 +162,7 @@ finally {
 if (-not $Down) {
     Write-Host 'Dashboard: http://127.0.0.1:8087'
     Write-Host 'MQTT (host bind): see NORNIR_MQTT_BIND_HOST (default 0.0.0.0:1883 in compose; prefer 127.0.0.1 in dashboard.run.env)'
+    if ($Rebuild) {
+        Write-Host 'Hard-refresh the browser after -Rebuild. Live progress during the brief downtime is not replayed; retained run meta + SQLite history should reappear.'
+    }
 }
