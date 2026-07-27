@@ -90,6 +90,21 @@ function Invoke-DashboardCompose {
     return [int]$LASTEXITCODE
 }
 
+function Test-DashboardServiceRunning {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ServiceName
+    )
+
+    $services = & docker compose -p $ComposeProject -f $composeFile @envFiles ps --status running --services $ServiceName
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    $matches = @($services | Where-Object { $_.Trim() -eq $ServiceName })
+    return ($matches.Count -gt 0)
+}
+
 function Test-DashboardHttp {
     try {
         $probe = Invoke-WebRequest -Uri 'http://127.0.0.1:8087/' -UseBasicParsing -TimeoutSec 3
@@ -124,13 +139,32 @@ try {
             }
 
             # Ensure broker is up without recreating it (keeps retained run meta).
-            Write-Host 'Ensuring Mosquitto is up...'
-            $null = Invoke-DashboardCompose -ComposeArgs @('up', '-d', 'mosquitto')
+            if (Test-DashboardServiceRunning -ServiceName 'mosquitto') {
+                Write-Host 'Mosquitto is already running; leaving it unchanged.'
+            }
+            else {
+                Write-Host 'Ensuring Mosquitto is up...'
+                $code = Invoke-DashboardCompose -ComposeArgs @('up', '-d', 'mosquitto')
+                if ($code -ne 0) {
+                    if (Test-DashboardServiceRunning -ServiceName 'mosquitto') {
+                        Write-Warning "mosquitto up returned exit $code, but service is already running — continuing"
+                    }
+                    else {
+                        Write-Warning "Could not start mosquitto (exit $code). If host port :1883 is already occupied by another stack, adjust NORNIR_MQTT_BIND_HOST."
+                    }
+                }
+            }
 
             # Recreate only the dashboard so it loads the new image and re-subscribes.
+            Write-Host 'Removing existing nornir-dashboard container...'
+            $code = Invoke-DashboardCompose -ComposeArgs @('rm', '-s', '-f', 'nornir-dashboard')
+            if ($code -ne 0) {
+                Write-Warning "docker compose rm returned exit $code for nornir-dashboard; continuing with recreate"
+            }
+
             Write-Host 'Recreating nornir-dashboard container (Mosquitto left running)...'
             $code = Invoke-DashboardCompose -ComposeArgs @(
-                'up', '-d', '--force-recreate', '--no-deps', 'nornir-dashboard'
+                'up', '-d', '--no-deps', 'nornir-dashboard'
             )
             if ($code -ne 0) {
                 if (Test-DashboardHttp) {
