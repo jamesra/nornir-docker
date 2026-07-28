@@ -147,7 +147,7 @@ try {
                 $code = Invoke-DashboardCompose -ComposeArgs @('up', '-d', 'mosquitto')
                 if ($code -ne 0) {
                     if (Test-DashboardServiceRunning -ServiceName 'mosquitto') {
-                        Write-Warning "mosquitto up returned exit $code, but service is already running — continuing"
+                        Write-Warning "mosquitto up returned exit $code, but service is already running - continuing"
                     }
                     else {
                         Write-Warning "Could not start mosquitto (exit $code). If host port :1883 is already occupied by another stack, adjust NORNIR_MQTT_BIND_HOST."
@@ -168,7 +168,7 @@ try {
             )
             if ($code -ne 0) {
                 if (Test-DashboardHttp) {
-                    Write-Warning "compose recreate failed (exit $code), but dashboard already responds on :8087 — continuing"
+                    Write-Warning "compose recreate failed (exit $code), but dashboard already responds on :8087 - continuing"
                 }
                 else {
                     Write-Error "docker compose failed (exit $code)"
@@ -180,7 +180,7 @@ try {
             if ($code -ne 0) {
                 # Host mosquitto (or another stack) may already own :1883; dashboard UI alone is enough.
                 if (Test-DashboardHttp) {
-                    Write-Warning "compose up failed (exit $code), but dashboard already responds on :8087 — continuing"
+                    Write-Warning "compose up failed (exit $code), but dashboard already responds on :8087 - continuing"
                 }
                 else {
                     Write-Error "docker compose failed (exit $code)"
