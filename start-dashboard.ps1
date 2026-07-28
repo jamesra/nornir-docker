@@ -42,6 +42,7 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'NornirDevRunMounts.ps1')
 . (Join-Path $PSScriptRoot 'NornirDotEnv.ps1')
+. (Join-Path $PSScriptRoot 'NornirBuildDashboard.ps1')
 
 if ($NoCache -and -not $Rebuild) {
     Write-Error '-NoCache requires -Rebuild.'
@@ -58,6 +59,14 @@ $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath
 $composeFile = Join-Path $PSScriptRoot 'compose.dashboard.yaml'
 if (-not (Test-Path -LiteralPath $composeFile)) {
     Write-Error "Missing $composeFile"
+}
+
+if (-not $Down) {
+    $needsSources = $Rebuild -or -not (Test-NornirDashboardImagePresent)
+    if ($needsSources) {
+        $buildDashboardDir = Set-NornirBuildDashboardComposeContext -RepoRoot $RepoRoot
+        Write-Host "Dashboard build context: $buildDashboardDir"
+    }
 }
 
 # Keep volumes/networks stable regardless of invocation directory.

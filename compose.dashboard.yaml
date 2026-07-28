@@ -26,7 +26,7 @@ services:
 
   nornir-dashboard:
     build:
-      context: ../nornir-builddashboard
+      context: ${NORNIR_BUILDDASHBOARD_CONTEXT:-../nornir-builddashboard}
       dockerfile: Dockerfile
     image: nornir-dashboard:latest
     restart: unless-stopped

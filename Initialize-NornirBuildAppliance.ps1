@@ -48,6 +48,7 @@ catch {
 }
 
 . (Join-Path $PSScriptRoot 'NornirDevRunMounts.ps1')
+. (Join-Path $PSScriptRoot 'NornirBuildDashboard.ps1')
 
 $DockerUserRoot = Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot
 $ScriptsRepoRoot = (Resolve-Path -LiteralPath $ScriptsRepoRoot).ProviderPath
@@ -55,6 +56,8 @@ $dockerDir = Join-Path $ScriptsRepoRoot 'nornir-docker'
 if (-not (Test-Path -LiteralPath $dockerDir)) {
     Write-Error "Expected nornir-docker under $ScriptsRepoRoot"
 }
+
+$null = Initialize-NornirBuildDashboardSubmodule -RepoRoot $ScriptsRepoRoot
 
 if ([string]::IsNullOrWhiteSpace($Owner)) {
     if ($env:NORNIR_GHCR_OWNER -and $env:NORNIR_GHCR_OWNER.Trim()) {

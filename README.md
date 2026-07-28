@@ -68,7 +68,10 @@ Compose can set ``NVIDIA_CUDA_APT_VERSION`` via environment (see ``compose.yaml`
 ## Build dashboard (MQTT)
 
 ``compose.dashboard.yaml`` starts a shared Mosquitto broker and the
-``nornir-dashboard`` web UI (port **8087**). From the monorepo root:
+``nornir-dashboard`` web UI (port **8087**). Image and compose **service** use the
+name ``nornir-dashboard``; **sources** are the ``nornir-builddashboard`` submodule
+at the monorepo root (initialized automatically by the scripts below when a local
+build is needed). From the monorepo root:
 
 ```powershell
 .\nornir-docker\start-dashboard.ps1
