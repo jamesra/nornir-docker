@@ -131,5 +131,5 @@ Use e.g. `/storage4/RC2/TEM` (or `/volumes/...` for the slow bind) in launch con
 | `NORNIR_NET_MOUNTS` unset | Override missing or wrong path in `devcontainer.json` |
 | `mount: ... Operation not permitted` | Missing `SYS_ADMIN` (override not used) |
 | `mount error(2): No such file or directory` for cifs | `cifs` not in `/proc/filesystems` on WSL host |
-| `mount error(13): Permission denied` | Bad/missing `.cred` or world-readable credentials file |
+| `mount error(13): Permission denied` | Bad/missing `.cred`, wrong username/password, or credential file not mode 0600. Windows bind mounts often show `0777` inside the container; ``mount-network-shares.sh`` copies ``*.cred`` to ``/run/nornir-cifs-creds`` with ``0600`` before mounting (rebuild ``nornir:prod`` after updating the script). Verify ``credentials=/run/secrets/net-creds/<name>.cred`` in ``nas-mounts.tsv`` matches an existing file. |
 | Still `9p` / `drvfs` on `/storage4` | Entry script not run / old image without `mount-network-shares.sh` — rebuild image |

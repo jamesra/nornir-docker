@@ -9,6 +9,10 @@
 #   options : comma-separated mount -o options; uid/gid are appended automatically.
 #             CIFS lines reference a credentials file in the SEPARATE secrets bind
 #             at /run/secrets/net-creds/<id>.cred (no secret material lives in this file).
+#             Each <id>.cred file is plain text (LF line endings):
+#               username=...
+#               password=...
+#               domain=...    (optional)
 #
 # fstype	source	target	options
 cifs	//192.168.0.199/Data/Volumes	/storage4	vers=3.1.1,rsize=4194304,wsize=4194304,cache=loose,actimeo=30,nostrictsync,iocharset=utf8,mfsymlinks,credentials=/run/secrets/net-creds/storage4.cred,multichannel,max_channels=4,actimeo=120,closetimeo=60,nobrl,noperm
