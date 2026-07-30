@@ -149,7 +149,7 @@ Recommended .run.nornir-net-mounts.env (PowerShell + Docker Desktop):
 
 Both keys must be set when using a custom cred location. Verify with:
   Test-Path 'C:\Docker\Run\nornir-net-mounts\net-mounts\nas-mounts.tsv'
-"@
+"@)
     }
 }
 
