@@ -87,6 +87,72 @@ function Get-NornirNetMountsHostPaths {
     return $null
 }
 
+function Test-NornirWslUncHostPath {
+    param([Parameter(Mandatory)][string]$Path)
+    return ($Path -match '(?i)^\\\\wsl(\$|\.localhost)\\')
+}
+
+function Assert-NornirNetMountHostPathsReady {
+    <#
+    .SYNOPSIS
+      Verify net-mount and cred host dirs exist before docker run (avoids opaque WSL socket errors).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$MountsDir,
+        [Parameter(Mandatory)][string]$CredsDir
+    )
+
+    $issues = [System.Collections.ArrayList]::new()
+    foreach ($pair in @(
+            @{ Label = 'NORNIR_NET_MOUNTS_DIR_HOST'; Path = $MountsDir; NeedFile = 'nas-mounts.tsv' }
+            @{ Label = 'NORNIR_NET_CREDS_DIR_HOST'; Path = $CredsDir; NeedFile = $null }
+        )) {
+        $hostPath = $pair.Path
+        $label = $pair.Label
+        if ([string]::IsNullOrWhiteSpace($hostPath)) {
+            [void]$issues.Add("${label} is empty.")
+            continue
+        }
+        if (Test-NornirWslUncHostPath -Path $hostPath) {
+            [void]$issues.Add(@"
+${label} uses a WSL UNC path (${hostPath}).
+For start-nornir-build.ps1 from PowerShell, prefer Windows paths (C:\...) instead of \\wsl.localhost\...
+WSL integration is not required for path-B CIFS; only tsv/creds are bind-mounted from the host.
+"@)
+        }
+        if (-not (Test-Path -LiteralPath $hostPath)) {
+            [void]$issues.Add("${label} path not found: ${hostPath}")
+            continue
+        }
+        if ($pair.NeedFile) {
+            $need = Join-Path $hostPath $pair.NeedFile
+            if (-not (Test-Path -LiteralPath $need)) {
+                [void]$issues.Add("Missing ${need} (required for path-B CIFS).")
+            }
+        }
+        if ($label -eq 'NORNIR_NET_CREDS_DIR_HOST') {
+            $creds = @(Get-ChildItem -LiteralPath $hostPath -Filter '*.cred' -File -ErrorAction SilentlyContinue)
+            if ($creds.Count -eq 0) {
+                [void]$issues.Add("No *.cred files under ${hostPath}.")
+            }
+        }
+    }
+
+    if ($issues.Count -gt 0) {
+        Write-Error (@"
+Host mount paths are not ready for docker bind mounts:
+$($issues -join [Environment]::NewLine)
+
+Recommended .run.nornir-net-mounts.env (PowerShell + Docker Desktop):
+  NORNIR_NET_MOUNTS_DIR_HOST=C:\Docker\Run\nornir-net-mounts\net-mounts
+  NORNIR_NET_CREDS_DIR_HOST=C:\Users\<you>\.nornir\secrets\net-creds
+
+Both keys must be set when using a custom cred location. Verify with:
+  Test-Path 'C:\Docker\Run\nornir-net-mounts\net-mounts\nas-mounts.tsv'
+"@
+    }
+}
+
 function New-NornirDevDockerRunMountArgs {
     <#
     .SYNOPSIS

@@ -263,6 +263,7 @@ NORNIR_NET_MOUNTS_DIR_HOST / NORNIR_NET_CREDS_DIR_HOST in .run.nornir-net-mounts
     }
     $netMountsDir = $resolved.MountsDir
     $netCredsDir = $resolved.CredsDir
+    Assert-NornirNetMountHostPathsReady -MountsDir $netMountsDir -CredsDir $netCredsDir
     [void]$runArgs.Add('-v')
     [void]$runArgs.Add("${netMountsDir}:/etc/nornir-net-mounts:ro")
     [void]$runArgs.Add('-v')
