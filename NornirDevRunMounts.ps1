@@ -59,7 +59,7 @@ function Get-NornirNetMountsHostPaths {
     if ($netMountsDir -and $netCredsDir) {
         return @{
             MountsDir = (Resolve-NornirHostBindPath -Path $netMountsDir)
-            CredsDir  = (Resolve-NornirHostBindPath -Path $netCredsDir)
+            CredsDir  = (Resolve-NornirNetCredsDirForDockerBind -CredsDir $netCredsDir)
             FromEnv   = $true
         }
     }
@@ -166,6 +166,135 @@ function Resolve-NornirHostBindPath {
     return "${prefix}${distroInPath}${rest}"
 }
 
+function Convert-NornirWslUncToWindowsPath {
+    <#
+    .SYNOPSIS
+      Map \\wsl.localhost\<Distro>\mnt\c\foo -> C:\foo for Docker bind mounts on Windows.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    $resolved = Resolve-NornirHostBindPath -Path $Path
+    if ($resolved -match '(?i)^\\\\wsl(?:\$|\.localhost)\\[^\\]+\\mnt\\([a-z])\\(.*)$') {
+        $drive = $Matches[1].ToUpper()
+        $rest = $Matches[2] -replace '/', '\'
+        return "${drive}:\${rest}"
+    }
+    return $null
+}
+
+function Convert-NornirWslUncToWslLinuxPath {
+    param([Parameter(Mandatory)][string]$Path)
+    $resolved = Resolve-NornirHostBindPath -Path $Path
+    if ($resolved -match '(?i)^\\\\wsl(?:\$|\.localhost)\\([^\\]+)\\mnt\\([a-z])\\(.*)$') {
+        $distro = $Matches[1]
+        $drive = $Matches[2]
+        $rest = $Matches[3] -replace '\\', '/'
+        foreach ($d in (Get-NornirWslDistroNames)) {
+            if ($d -ieq $distro) {
+                $distro = $d
+                break
+            }
+        }
+        return @{
+            Distro    = $distro
+            LinuxPath = "/mnt/${drive}/${rest}"
+        }
+    }
+    return $null
+}
+
+function Get-NornirCredFileNamesInDir {
+    <#
+    .SYNOPSIS
+      List *.cred basenames; WSL UNC paths often hide files from Get-ChildItem — fall back to C:\ and wsl.
+    #>
+    param([Parameter(Mandatory)][string]$CredsDir)
+    $names = [System.Collections.ArrayList]::new()
+
+    function Add-CredNamesFromListing {
+        param([string]$Dir)
+        if ([string]::IsNullOrWhiteSpace($Dir)) { return }
+        try {
+            foreach ($f in @(Get-ChildItem -LiteralPath $Dir -File -ErrorAction Stop)) {
+                if ($f.Name -like '*.cred') {
+                    [void]$names.Add($f.Name)
+                }
+            }
+        }
+        catch {
+        }
+    }
+
+    Add-CredNamesFromListing -Dir $CredsDir
+    if ($names.Count -gt 0) {
+        return @($names | Select-Object -Unique)
+    }
+
+    $winPath = Convert-NornirWslUncToWindowsPath -Path $CredsDir
+    Add-CredNamesFromListing -Dir $winPath
+    if ($names.Count -gt 0) {
+        return @($names | Select-Object -Unique)
+    }
+
+    $wsl = Convert-NornirWslUncToWslLinuxPath -Path $CredsDir
+    if ($wsl -and (Get-Command wsl -ErrorAction SilentlyContinue)) {
+        $linuxPath = $wsl.LinuxPath.TrimEnd('/')
+        $out = & wsl -d $wsl.Distro -- sh -lc "find '$linuxPath' -maxdepth 1 -type f -name '*.cred' -printf '%f\n' 2>/dev/null"
+        if ($LASTEXITCODE -eq 0 -and $out) {
+            foreach ($line in @($out)) {
+                $n = [string]$line.Trim()
+                if ($n) {
+                    [void]$names.Add($n)
+                }
+            }
+        }
+    }
+    return @($names | Select-Object -Unique)
+}
+
+function Test-NornirCredFileExists {
+    param(
+        [Parameter(Mandatory)][string]$CredsDir,
+        [Parameter(Mandatory)][string]$FileName
+    )
+    foreach ($dir in @($CredsDir, (Convert-NornirWslUncToWindowsPath -Path $CredsDir))) {
+        if ([string]::IsNullOrWhiteSpace($dir)) { continue }
+        if (Test-NornirHostPathExists -Path (Join-Path $dir $FileName)) {
+            return $true
+        }
+    }
+    $wsl = Convert-NornirWslUncToWslLinuxPath -Path $CredsDir
+    if ($wsl -and (Get-Command wsl -ErrorAction SilentlyContinue)) {
+        $linuxFile = "$($wsl.LinuxPath.TrimEnd('/'))/$FileName"
+        & wsl -d $wsl.Distro -- test -f $linuxFile 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Resolve-NornirNetCredsDirForDockerBind {
+    <#
+    .SYNOPSIS
+      Prefer a Windows path when WSL UNC exists but cannot enumerate *.cred (Docker bind-mount quirk).
+    #>
+    param([Parameter(Mandatory)][string]$CredsDir)
+    $resolved = Resolve-NornirHostBindPath -Path $CredsDir
+    if (-not (Test-NornirWslUncHostPath -Path $resolved)) {
+        return $resolved
+    }
+    $uncCreds = Get-NornirCredFileNamesInDir -CredsDir $resolved
+    $winPath = Convert-NornirWslUncToWindowsPath -Path $resolved
+    if ($winPath -and (Test-NornirHostPathExists -Path $winPath)) {
+        $winCreds = Get-NornirCredFileNamesInDir -CredsDir $winPath
+        if ($winCreds.Count -gt 0 -and $uncCreds.Count -eq 0) {
+            Write-Host "Net-creds: using Windows bind path (WSL UNC could not list *.cred): $winPath"
+            return $winPath
+        }
+    }
+    return $resolved
+}
+
 function Test-NornirHostPathExists {
     param([Parameter(Mandatory)][string]$Path)
     try {
@@ -234,8 +363,7 @@ function Get-NornirNetCredsDirDiagnostics {
     if ($required.Count -gt 0) {
         [void]$lines.Add("Required by nas-mounts.tsv: $($required -join ', ')")
         foreach ($name in $required) {
-            $path = Join-Path $CredsDir $name
-            if (-not (Test-NornirHostPathExists -Path $path)) {
+            if (-not (Test-NornirCredFileExists -CredsDir $CredsDir -FileName $name)) {
                 [void]$lines.Add("  Missing: $name")
             }
         }
@@ -243,19 +371,33 @@ function Get-NornirNetCredsDirDiagnostics {
     else {
         [void]$lines.Add('Add one *.cred file per CIFS row in nas-mounts.tsv (credentials=/run/secrets/net-creds/<name>.cred).')
     }
-    try {
-        $all = @(Get-ChildItem -LiteralPath $CredsDir -File -ErrorAction Stop)
-        if ($all.Count -eq 0) {
-            [void]$lines.Add("Directory is empty: ${CredsDir}")
-        }
-        else {
-            $names = ($all | ForEach-Object { $_.Name }) -join ', '
-            [void]$lines.Add("Files present (none matched *.cred): $names")
-            [void]$lines.Add('Rename or copy credential files to use the .cred extension (e.g. storage4.cred).')
-        }
+    $found = Get-NornirCredFileNamesInDir -CredsDir $CredsDir
+    if ($found.Count -gt 0) {
+        [void]$lines.Add("Found *.cred (via Windows/WSL fallback): $($found -join ', ')")
     }
-    catch {
-        [void]$lines.Add("Could not list ${CredsDir}: $($_.Exception.Message)")
+    else {
+        try {
+            $all = @(Get-ChildItem -LiteralPath $CredsDir -File -ErrorAction Stop)
+            if ($all.Count -eq 0) {
+                [void]$lines.Add("Directory is empty (UNC listing): ${CredsDir}")
+                $winPath = Convert-NornirWslUncToWindowsPath -Path $CredsDir
+                if ($winPath) {
+                    [void]$lines.Add("Equivalent Windows path: ${winPath}")
+                }
+            }
+            else {
+                $names = ($all | ForEach-Object { $_.Name }) -join ', '
+                [void]$lines.Add("Files present (none matched *.cred): $names")
+                [void]$lines.Add('Rename or copy credential files to use the .cred extension (e.g. storage4.cred).')
+            }
+        }
+        catch {
+            [void]$lines.Add("Could not list ${CredsDir}: $($_.Exception.Message)")
+            $winPath = Convert-NornirWslUncToWindowsPath -Path $CredsDir
+            if ($winPath) {
+                [void]$lines.Add("Try Windows path in .env instead: ${winPath}")
+            }
+        }
     }
     [void]$lines.Add(@'
 Example storage4.cred (LF line endings, no .txt suffix):
@@ -278,7 +420,7 @@ function Assert-NornirNetMountHostPathsReady {
 
     $issues = [System.Collections.ArrayList]::new()
     $resolvedMountsDir = Resolve-NornirHostBindPath -Path $MountsDir
-    $resolvedCredsDir = Resolve-NornirHostBindPath -Path $CredsDir
+    $resolvedCredsDir = Resolve-NornirNetCredsDirForDockerBind -CredsDir $CredsDir
     foreach ($pair in @(
             @{ Label = 'NORNIR_NET_MOUNTS_DIR_HOST'; Path = $resolvedMountsDir; NeedFile = 'nas-mounts.tsv' }
             @{ Label = 'NORNIR_NET_CREDS_DIR_HOST'; Path = $resolvedCredsDir; NeedFile = $null }
@@ -305,18 +447,17 @@ function Assert-NornirNetMountHostPathsReady {
             }
         }
         if ($label -eq 'NORNIR_NET_CREDS_DIR_HOST') {
-            $creds = @(Get-ChildItem -LiteralPath $hostPath -Filter '*.cred' -File -ErrorAction SilentlyContinue)
-            if ($creds.Count -eq 0) {
-                $detail = "No *.cred files under ${hostPath}."
+            $credNames = Get-NornirCredFileNamesInDir -CredsDir $hostPath
+            if ($credNames.Count -eq 0) {
+                $detail = "No *.cred files found under ${hostPath} (checked WSL UNC, Windows path, and wsl ls)."
                 $detail += [Environment]::NewLine + (Get-NornirNetCredsDirDiagnostics -CredsDir $hostPath -MountsDir $resolvedMountsDir)
                 [void]$issues.Add($detail)
             }
             else {
                 $required = Get-NornirRequiredCredFileNames -MountsDir $resolvedMountsDir
                 foreach ($name in $required) {
-                    $need = Join-Path $hostPath $name
-                    if (-not (Test-NornirHostPathExists -Path $need)) {
-                        [void]$issues.Add("Missing credential file required by nas-mounts.tsv: ${need}")
+                    if (-not (Test-NornirCredFileExists -CredsDir $hostPath -FileName $name)) {
+                        [void]$issues.Add("Missing credential file required by nas-mounts.tsv: ${name} (looked under ${hostPath})")
                     }
                 }
             }
