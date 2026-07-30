@@ -58,8 +58,8 @@ function Get-NornirNetMountsHostPaths {
     $netCredsDir = Get-NornirDotEnvValue -Key 'NORNIR_NET_CREDS_DIR_HOST' -Paths $EnvPaths
     if ($netMountsDir -and $netCredsDir) {
         return @{
-            MountsDir = $netMountsDir
-            CredsDir  = $netCredsDir
+            MountsDir = (Resolve-NornirHostBindPath -Path $netMountsDir)
+            CredsDir  = (Resolve-NornirHostBindPath -Path $netCredsDir)
             FromEnv   = $true
         }
     }
@@ -96,6 +96,76 @@ function Test-NornirWslUncHostPath {
     return $false
 }
 
+function Get-NornirWslDistroNames {
+    <#
+    .SYNOPSIS
+      Return installed WSL distro names (exact spelling) from wsl -l -v.
+    #>
+    if (-not (Get-Command wsl -ErrorAction SilentlyContinue)) {
+        return @()
+    }
+    try {
+        $text = [string](& wsl -l -v 2>&1 | Out-String)
+    }
+    catch {
+        return @()
+    }
+    $names = [System.Collections.ArrayList]::new()
+    foreach ($line in ($text -split "`r?`n")) {
+        if ($line -match '^\s*\*?\s*(\S+)\s+(Running|Stopped)') {
+            [void]$names.Add($Matches[1])
+        }
+    }
+    return @($names)
+}
+
+function Resolve-NornirHostBindPath {
+    <#
+    .SYNOPSIS
+      Normalize host bind paths for docker -v (fix WSL UNC prefix and distro name casing).
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    $p = $Path.Trim()
+    if (-not (Test-NornirWslUncHostPath -Path $p)) {
+        return $p
+    }
+    if ($p -match '^(?<prefix>\\\\wsl\.localhost\\)(?<distro>[^\\]+)(?<rest>\\.*)$') {
+        $prefix = $Matches['prefix']
+        $distroInPath = $Matches['distro']
+        $rest = $Matches['rest']
+    }
+    elseif ($p -match '^(?<prefix>\\\\wsl\$\\)(?<distro>[^\\]+)(?<rest>\\.*)$') {
+        $prefix = $Matches['prefix']
+        $distroInPath = $Matches['distro']
+        $rest = $Matches['rest']
+    }
+    elseif ($p -match '^(?<single>\\)wsl\.localhost\\(?<distro>[^\\]+)(?<rest>\\.*)$') {
+        $prefix = '\\wsl.localhost\'
+        $distroInPath = $Matches['distro']
+        $rest = $Matches['rest']
+    }
+    elseif ($p -match '^wsl\.localhost\\(?<distro>[^\\]+)(?<rest>\\.*)$') {
+        $prefix = '\\wsl.localhost\'
+        $distroInPath = $Matches['distro']
+        $rest = $Matches['rest']
+    }
+    else {
+        return $p
+    }
+    $distros = Get-NornirWslDistroNames
+    foreach ($d in $distros) {
+        if ($d -ceq $distroInPath) {
+            return "${prefix}${d}${rest}"
+        }
+    }
+    foreach ($d in $distros) {
+        if ($d -ieq $distroInPath) {
+            return "${prefix}${d}${rest}"
+        }
+    }
+    return "${prefix}${distroInPath}${rest}"
+}
+
 function Test-NornirHostPathExists {
     param([Parameter(Mandatory)][string]$Path)
     try {
@@ -104,6 +174,33 @@ function Test-NornirHostPathExists {
     catch {
         return $false
     }
+}
+
+function Get-NornirWslUncPathDiagnostics {
+    param([Parameter(Mandatory)][string]$Path)
+    $lines = [System.Collections.ArrayList]::new()
+    $distros = Get-NornirWslDistroNames
+    if ($distros.Count -gt 0) {
+        [void]$lines.Add("Installed WSL distros (use exact name): $($distros -join ', ')")
+    }
+    else {
+        [void]$lines.Add('Could not list WSL distros (is WSL installed?).')
+    }
+    if ($Path -match '(?i)^\\\\wsl(?:\$|\.localhost)\\([^\\]+)\\') {
+        $distroInPath = $Matches[1]
+        $matched = @($distros | Where-Object { $_ -ieq $distroInPath })
+        if ($matched.Count -eq 0 -and $distros.Count -gt 0) {
+            [void]$lines.Add("Distro '$distroInPath' in the path is not installed. Docker fails with distro-services/*.sock when the name is wrong.")
+        }
+        elseif ($matched.Count -eq 1 -and $matched[0] -cne $distroInPath) {
+            [void]$lines.Add("Distro name casing may be wrong: path has '$distroInPath' but WSL reports '$($matched[0])'.")
+        }
+    }
+    [void]$lines.Add('Docker Desktop -> Settings -> Resources -> WSL integration: enable for that distro, then wsl --shutdown and restart Docker.')
+    [void]$lines.Add('Try: wsl -d <Distro> -- test -e <linux-path>  (linux path = /mnt/c/... for C:\...)')
+    [void]$lines.Add('Alternate UNC prefix: \\wsl$\<Distro>\mnt\c\... instead of \\wsl.localhost\<Distro>\...')
+    [void]$lines.Add('If WSL UNC stays blocked, use C:\... paths in .env (no WSL integration required for path-B CIFS).')
+    return ($lines -join [Environment]::NewLine)
 }
 
 function Assert-NornirNetMountHostPathsReady {
@@ -118,8 +215,8 @@ function Assert-NornirNetMountHostPathsReady {
 
     $issues = [System.Collections.ArrayList]::new()
     foreach ($pair in @(
-            @{ Label = 'NORNIR_NET_MOUNTS_DIR_HOST'; Path = $MountsDir; NeedFile = 'nas-mounts.tsv' }
-            @{ Label = 'NORNIR_NET_CREDS_DIR_HOST'; Path = $CredsDir; NeedFile = $null }
+            @{ Label = 'NORNIR_NET_MOUNTS_DIR_HOST'; Path = (Resolve-NornirHostBindPath -Path $MountsDir); NeedFile = 'nas-mounts.tsv' }
+            @{ Label = 'NORNIR_NET_CREDS_DIR_HOST'; Path = (Resolve-NornirHostBindPath -Path $CredsDir); NeedFile = $null }
         )) {
         $hostPath = $pair.Path
         $label = $pair.Label
@@ -127,19 +224,13 @@ function Assert-NornirNetMountHostPathsReady {
             [void]$issues.Add("${label} is empty.")
             continue
         }
-        if (Test-NornirWslUncHostPath -Path $hostPath) {
-            [void]$issues.Add(@"
-${label} uses a WSL UNC path (${hostPath}).
-Access to \\wsl.localhost\ is denied when Docker WSL integration is off or the distro is unavailable.
-For start-nornir-build.ps1 from PowerShell use Windows paths instead, for example:
-  C:\Docker\Run\nornir-net-mounts\net-mounts
-  C:\Users\<you>\.nornir\secrets\net-creds
-WSL integration is not required for path-B CIFS; only tsv/creds are bind-mounted from the host.
-"@)
-            continue
-        }
+        $isWslUnc = Test-NornirWslUncHostPath -Path $hostPath
         if (-not (Test-NornirHostPathExists -Path $hostPath)) {
-            [void]$issues.Add("${label} path not found: ${hostPath}")
+            $detail = "${label} path not accessible: ${hostPath}"
+            if ($isWslUnc) {
+                $detail += [Environment]::NewLine + (Get-NornirWslUncPathDiagnostics -Path $hostPath)
+            }
+            [void]$issues.Add($detail)
             continue
         }
         if ($pair.NeedFile) {
@@ -161,12 +252,13 @@ WSL integration is not required for path-B CIFS; only tsv/creds are bind-mounted
 Host mount paths are not ready for docker bind mounts:
 $($issues -join [Environment]::NewLine)
 
-Recommended .run.nornir-net-mounts.env (PowerShell + Docker Desktop):
+Example .run.nornir-net-mounts.env (WSL UNC — exact distro name from wsl -l -v):
+  NORNIR_NET_MOUNTS_DIR_HOST=\\wsl.localhost\Ubuntu\mnt\c\Docker\Run\nornir-net-mounts\net-mounts
+  NORNIR_NET_CREDS_DIR_HOST=\\wsl.localhost\Ubuntu\mnt\c\Docker\Run\nornir-net-mounts\secrets\net-creds
+
+Or Windows paths (no WSL UNC):
   NORNIR_NET_MOUNTS_DIR_HOST=C:\Docker\Run\nornir-net-mounts\net-mounts
   NORNIR_NET_CREDS_DIR_HOST=C:\Users\<you>\.nornir\secrets\net-creds
-
-Both keys must be set when using a custom cred location. Verify with:
-  Test-Path 'C:\Docker\Run\nornir-net-mounts\net-mounts\nas-mounts.tsv'
 "@)
     }
 }
