@@ -203,6 +203,69 @@ function Get-NornirWslUncPathDiagnostics {
     return ($lines -join [Environment]::NewLine)
 }
 
+function Get-NornirRequiredCredFileNames {
+    <#
+    .SYNOPSIS
+      Parse credentials=/run/secrets/net-creds/<name>.cred from nas-mounts.tsv.
+    #>
+    param([Parameter(Mandatory)][string]$MountsDir)
+    $tsv = Join-Path $MountsDir 'nas-mounts.tsv'
+    if (-not (Test-NornirHostPathExists -Path $tsv)) {
+        return @()
+    }
+    $required = [System.Collections.ArrayList]::new()
+    Get-Content -LiteralPath $tsv -Encoding utf8 | ForEach-Object {
+        $line = $_.TrimEnd("`r")
+        if (-not $line -or $line.StartsWith('#')) { return }
+        if ($line -match 'credentials=/run/secrets/net-creds/([^,\s]+)') {
+            [void]$required.Add($Matches[1])
+        }
+    }
+    return @($required | Select-Object -Unique)
+}
+
+function Get-NornirNetCredsDirDiagnostics {
+    param(
+        [Parameter(Mandatory)][string]$CredsDir,
+        [Parameter(Mandatory)][string]$MountsDir
+    )
+    $lines = [System.Collections.ArrayList]::new()
+    $required = Get-NornirRequiredCredFileNames -MountsDir $MountsDir
+    if ($required.Count -gt 0) {
+        [void]$lines.Add("Required by nas-mounts.tsv: $($required -join ', ')")
+        foreach ($name in $required) {
+            $path = Join-Path $CredsDir $name
+            if (-not (Test-NornirHostPathExists -Path $path)) {
+                [void]$lines.Add("  Missing: $name")
+            }
+        }
+    }
+    else {
+        [void]$lines.Add('Add one *.cred file per CIFS row in nas-mounts.tsv (credentials=/run/secrets/net-creds/<name>.cred).')
+    }
+    try {
+        $all = @(Get-ChildItem -LiteralPath $CredsDir -File -ErrorAction Stop)
+        if ($all.Count -eq 0) {
+            [void]$lines.Add("Directory is empty: ${CredsDir}")
+        }
+        else {
+            $names = ($all | ForEach-Object { $_.Name }) -join ', '
+            [void]$lines.Add("Files present (none matched *.cred): $names")
+            [void]$lines.Add('Rename or copy credential files to use the .cred extension (e.g. storage4.cred).')
+        }
+    }
+    catch {
+        [void]$lines.Add("Could not list ${CredsDir}: $($_.Exception.Message)")
+    }
+    [void]$lines.Add(@'
+Example storage4.cred (LF line endings, no .txt suffix):
+  username=myuser
+  password=mypass
+  domain=WORKGROUP
+'@)
+    return ($lines -join [Environment]::NewLine)
+}
+
 function Assert-NornirNetMountHostPathsReady {
     <#
     .SYNOPSIS
@@ -214,9 +277,11 @@ function Assert-NornirNetMountHostPathsReady {
     )
 
     $issues = [System.Collections.ArrayList]::new()
+    $resolvedMountsDir = Resolve-NornirHostBindPath -Path $MountsDir
+    $resolvedCredsDir = Resolve-NornirHostBindPath -Path $CredsDir
     foreach ($pair in @(
-            @{ Label = 'NORNIR_NET_MOUNTS_DIR_HOST'; Path = (Resolve-NornirHostBindPath -Path $MountsDir); NeedFile = 'nas-mounts.tsv' }
-            @{ Label = 'NORNIR_NET_CREDS_DIR_HOST'; Path = (Resolve-NornirHostBindPath -Path $CredsDir); NeedFile = $null }
+            @{ Label = 'NORNIR_NET_MOUNTS_DIR_HOST'; Path = $resolvedMountsDir; NeedFile = 'nas-mounts.tsv' }
+            @{ Label = 'NORNIR_NET_CREDS_DIR_HOST'; Path = $resolvedCredsDir; NeedFile = $null }
         )) {
         $hostPath = $pair.Path
         $label = $pair.Label
@@ -242,7 +307,18 @@ function Assert-NornirNetMountHostPathsReady {
         if ($label -eq 'NORNIR_NET_CREDS_DIR_HOST') {
             $creds = @(Get-ChildItem -LiteralPath $hostPath -Filter '*.cred' -File -ErrorAction SilentlyContinue)
             if ($creds.Count -eq 0) {
-                [void]$issues.Add("No *.cred files under ${hostPath}.")
+                $detail = "No *.cred files under ${hostPath}."
+                $detail += [Environment]::NewLine + (Get-NornirNetCredsDirDiagnostics -CredsDir $hostPath -MountsDir $resolvedMountsDir)
+                [void]$issues.Add($detail)
+            }
+            else {
+                $required = Get-NornirRequiredCredFileNames -MountsDir $resolvedMountsDir
+                foreach ($name in $required) {
+                    $need = Join-Path $hostPath $name
+                    if (-not (Test-NornirHostPathExists -Path $need)) {
+                        [void]$issues.Add("Missing credential file required by nas-mounts.tsv: ${need}")
+                    }
+                }
             }
         }
     }
