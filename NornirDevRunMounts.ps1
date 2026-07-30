@@ -89,7 +89,21 @@ function Get-NornirNetMountsHostPaths {
 
 function Test-NornirWslUncHostPath {
     param([Parameter(Mandatory)][string]$Path)
-    return ($Path -match '(?i)^\\\\wsl(\$|\.localhost)\\')
+    $normalized = $Path.Trim()
+    if ($normalized -match '(?i)^\\\\wsl(\$|\.localhost)\\') { return $true }
+    if ($normalized -match '(?i)^\\wsl\.localhost\\') { return $true }
+    if ($normalized -match '(?i)^wsl\.localhost\\') { return $true }
+    return $false
+}
+
+function Test-NornirHostPathExists {
+    param([Parameter(Mandatory)][string]$Path)
+    try {
+        return Test-Path -LiteralPath $Path
+    }
+    catch {
+        return $false
+    }
 }
 
 function Assert-NornirNetMountHostPathsReady {
@@ -116,17 +130,21 @@ function Assert-NornirNetMountHostPathsReady {
         if (Test-NornirWslUncHostPath -Path $hostPath) {
             [void]$issues.Add(@"
 ${label} uses a WSL UNC path (${hostPath}).
-For start-nornir-build.ps1 from PowerShell, prefer Windows paths (C:\...) instead of \\wsl.localhost\...
+Access to \\wsl.localhost\ is denied when Docker WSL integration is off or the distro is unavailable.
+For start-nornir-build.ps1 from PowerShell use Windows paths instead, for example:
+  C:\Docker\Run\nornir-net-mounts\net-mounts
+  C:\Users\<you>\.nornir\secrets\net-creds
 WSL integration is not required for path-B CIFS; only tsv/creds are bind-mounted from the host.
 "@)
+            continue
         }
-        if (-not (Test-Path -LiteralPath $hostPath)) {
+        if (-not (Test-NornirHostPathExists -Path $hostPath)) {
             [void]$issues.Add("${label} path not found: ${hostPath}")
             continue
         }
         if ($pair.NeedFile) {
             $need = Join-Path $hostPath $pair.NeedFile
-            if (-not (Test-Path -LiteralPath $need)) {
+            if (-not (Test-NornirHostPathExists -Path $need)) {
                 [void]$issues.Add("Missing ${need} (required for path-B CIFS).")
             }
         }
