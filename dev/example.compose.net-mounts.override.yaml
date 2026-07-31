@@ -1,23 +1,25 @@
-# Template -> copy to D:\Docker\Run\nornir-dev\compose.net-mounts.override.yaml (not committed).
+# Template -> copy to $NORNIR_DOCKER_USER_ROOT/Run/nornir-net-mounts/compose.net-mounts.override.yaml
+# (or legacy Run/nornir-dev/; not committed).
 #
 # Enables the in-container network-share mount manifest (CIFS/SMB3 + NFSv4) for cursor-dev.
 # This grants CAP_SYS_ADMIN (required for the mount() syscall inside the container) and binds
 # the manifest + secrets dirs read-only. Both binds are fixed regardless of how many shares the
 # manifest lists, so adding/removing a share is a data change (edit nas-mounts.tsv), never a
-# compose/Dockerfile edit.
+# compose/Dockerfile edit. After mounts succeed, cursor-dev-entry.sh drops CAP_SYS_ADMIN when
+# setpriv/capsh are available.
 #
 # Prerequisites (see nornir-docker/windows-docker-layout/NORNIR_DEV_VOLUMES.md):
 #   - cifs / nfsv4 kernel drivers loaded on the WSL2 host (shared kernel).
 #   - NORNIR_NET_MOUNTS_DIR_HOST  -> dir containing nas-mounts.tsv
-#   - NORNIR_NET_CREDS_DIR_HOST   -> dir containing per-share *.cred files (chmod 600)
+#   - NORNIR_NET_CREDS_DIR_HOST   -> dir containing per-share *.cred files
 #   - Put those vars in nornir-docker/.env (Compose substitution) as well as Run env files.
 #
 # Use with:
 #   docker compose -f nornir-docker/compose.cursor-dev.yaml \
-#     -f D:/Docker/Run/nornir-dev/compose.net-mounts.override.yaml run --rm --gpus all cursor-dev
+#     -f C:/Docker/Run/nornir-net-mounts/compose.net-mounts.override.yaml run --rm --gpus all cursor-dev
 #
-# SECURITY: CAP_SYS_ADMIN is a real privilege increase. It is confined to this opt-in override;
-# the default cursor-dev service (without this file) stays unprivileged.
+# SECURITY: CAP_SYS_ADMIN is a real privilege increase for the mount phase only (then dropped).
+# The default cursor-dev service (without this file) stays unprivileged.
 
 services:
   cursor-dev:

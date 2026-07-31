@@ -531,13 +531,6 @@ function New-NornirDevDockerRunMountArgs {
         [void]$notes.Add('legacy code -> /legacycode')
     }
 
-    $volumesHost = Get-NornirDotEnvValue -Key 'NORNIR_VOLUMES_HOST' -Paths $EnvPaths
-    if ($volumesHost) {
-        [void]$dockerArgs.Add('-v')
-        [void]$dockerArgs.Add("${volumesHost}:/volumes")
-        [void]$notes.Add('NAS volumes -> /volumes')
-    }
-
     if ($IncludeNetMounts) {
         $resolved = Get-NornirNetMountsHostPaths -EnvPaths $EnvPaths -DockerUserRoot $DockerUserRoot
         if ($resolved) {

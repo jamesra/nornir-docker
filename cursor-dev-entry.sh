@@ -5,11 +5,14 @@
 # NORNIR_WORKSPACE_STRATEGY=clone: named volume / appliance - clone if empty; refresh branch when .git exists.
 # NORNIR_CURSOR_DEV_SETUP_ONLY=1: pip install -e only (used by cursor-worker-entry.sh after git prep).
 # NORNIR_NET_MOUNTS=1: apply /etc/nornir-net-mounts/nas-mounts.tsv (CIFS/NFS) via mount-network-shares.sh.
+# After successful mounts, CAP_SYS_ADMIN is dropped before the final exec when setpriv/capsh exist.
 set -euo pipefail
 
 ulimit -n 65536 2>/dev/null || true
 
 export GIT_TERMINAL_PROMPT=0
+
+NORNIR_NET_MOUNTS_APPLIED=0
 
 apply_network_shares() {
   local script="/usr/local/bin/mount-network-shares.sh"
@@ -25,7 +28,24 @@ apply_network_shares() {
       exit 1
     fi
     bash "${script}"
+    NORNIR_NET_MOUNTS_APPLIED=1
   fi
+}
+
+exec_after_mounts() {
+  local helper="/usr/local/bin/drop-sys-admin-after-mounts.sh"
+  if [[ ! -f "${helper}" ]]; then
+    helper="/usr/local/lib/nornir-docker/drop-sys-admin-after-mounts.sh"
+  fi
+  if [[ ! -f "${helper}" ]]; then
+    helper="/workspace/nornir-docker/drop-sys-admin-after-mounts.sh"
+  fi
+  if [[ "${NORNIR_NET_MOUNTS_APPLIED}" -eq 1 && -f "${helper}" ]]; then
+    # shellcheck source=/dev/null
+    source "${helper}"
+    drop_sys_admin_after_mounts -- "$@"
+  fi
+  exec "$@"
 }
 
 install_editables() {
@@ -46,7 +66,7 @@ apply_network_shares
 if [[ "${NORNIR_CURSOR_DEV_SETUP_ONLY:-0}" == "1" ]]; then
   install_editables
   if [[ $# -gt 0 ]]; then
-    exec "$@"
+    exec_after_mounts "$@"
   fi
   exit 0
 fi
@@ -182,4 +202,4 @@ else
 fi
 
 install_editables
-exec "$@"
+exec_after_mounts "$@"

@@ -68,10 +68,11 @@ RUN apt-get purge -y build-essential \
 
 # mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
 # cifs-utils / nfs-common: in-container NAS mounts (NORNIR_NET_MOUNTS=1; path-B, CAP_SYS_ADMIN at run)
+# libcap2-bin: capsh fallback to drop CAP_SYS_ADMIN after mounts (setpriv comes with util-linux)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         mosquitto mosquitto-clients \
-        cifs-utils nfs-common keyutils \
+        cifs-utils nfs-common keyutils libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
@@ -115,10 +116,14 @@ RUN chmod +x /tmp/install-monorepo-editables.sh \
 RUN mkdir -p /data
 
 COPY nornir-docker/mount-network-shares.sh /usr/local/bin/mount-network-shares.sh
+COPY nornir-docker/drop-sys-admin-after-mounts.sh /usr/local/bin/drop-sys-admin-after-mounts.sh
 COPY nornir-docker/prod-entry.sh /usr/local/bin/prod-entry.sh
 RUN sed -i 's/\r$//' /usr/local/bin/mount-network-shares.sh \
+    && sed -i 's/\r$//' /usr/local/bin/drop-sys-admin-after-mounts.sh \
     && sed -i 's/\r$//' /usr/local/bin/prod-entry.sh \
-    && chmod +x /usr/local/bin/mount-network-shares.sh /usr/local/bin/prod-entry.sh
+    && chmod +x /usr/local/bin/mount-network-shares.sh \
+       /usr/local/bin/drop-sys-admin-after-mounts.sh \
+       /usr/local/bin/prod-entry.sh
 
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/prod-entry.sh"]

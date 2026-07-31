@@ -1,20 +1,13 @@
-# NAS volumes and in-container CIFS (machine-local)
+# In-container CIFS (path B) — machine-local layout
 
 **Preferred shared layout (all roles):** `<NORNIR_DOCKER_USER_ROOT>\Run\nornir-net-mounts\`  
 (default root `C:\Docker` when `NORNIR_DOCKER_USER_ROOT` is unset). Used by **`start-nornir-build.ps1`**, cursor-dev net mounts, and worker `-DevParityMounts`.
 
-Legacy programmer-only path `Run\nornir-dev\` still works as a fallback. Migrate by copying `net-mounts\`, `secrets\net-creds\`, and pointing env at the new tree (see `Initialize-NornirBuildAppliance.ps1`).
+Legacy programmer-only path `Run\nornir-dev\` still works as a fallback for the same net-mounts files. Migrate by copying `net-mounts\`, `secrets\net-creds\`, and pointing env at the new tree (see `Initialize-NornirBuildAppliance.ps1`).
+
+**Primary NAS path:** in-container CIFS/NFS from `nas-mounts.tsv` (SMB direct). Host/WSL bind-mounts of the NAS share are not used.
 
 Committed **templates** live under `nornir-docker/dev/example.*` and `nornir-docker/example.nornir-net-mounts.run.env`.
-
-There are **two** ways to see NAS data in the container:
-
-| Path | Mechanism | Speed | Env / files |
-|------|-----------|-------|-------------|
-| `/volumes` | Bind-mount a **WSL host** mount (`NORNIR_VOLUMES_HOST`) | Often slow (9p/drvfs) | `mount-volumes-wsl.sh` + `NORNIR_VOLUMES_HOST` |
-| `/storage4` | **In-container CIFS** from `nas-mounts.tsv` | Fast (SMB direct) | `compose.net-mounts.override.yaml` + `NORNIR_NET_MOUNTS_*` |
-
-Compose also bind-mounts `NORNIR_VOLUMES_HOST` at `/storage4` as a legacy alias of `/volumes`. When CIFS is enabled, `mount-network-shares.sh` mounts the real share **over** that bind so `/storage4` becomes native CIFS.
 
 ---
 
@@ -23,25 +16,28 @@ Compose also bind-mounts `NORNIR_VOLUMES_HOST` at `/storage4` as a legacy alias 
 ### 1. Layout folder
 
 ```text
-D:\Docker\Run\nornir-dev\
+C:\Docker\Run\nornir-net-mounts\
+  net-mounts\nas-mounts.tsv
+  secrets\net-creds\*.cred
+  .run.nornir-net-mounts.env
+  compose.net-mounts.override.yaml   # for cursor-dev / compose only
 ```
 
 ### 2. Copy templates from the repo
 
 | Copy from (repo) | To (machine-local) |
 |------------------|-------------------|
-| `nornir-docker/dev/example.compose.net-mounts.override.yaml` | `D:\Docker\Run\nornir-dev\compose.net-mounts.override.yaml` |
-| `nornir-docker/dev/example.nas-mounts.tsv` | `D:\Docker\Run\nornir-dev\net-mounts\nas-mounts.tsv` |
-| `nornir-docker/dev/example.nornir-dev.net-mounts.devcontainer.json` | `D:\Docker\Run\nornir-dev\devcontainer.json` |
-| `nornir-docker/dev/example.mount-volumes-wsl.sh` | `D:\Docker\Run\nornir-dev\mount-volumes-wsl.sh` |
-| `nornir-docker/dev/example.modules-load.net-shares.conf` (if present) or `Run\...\modules-load.net-shares.conf` | WSL `/etc/modules-load.d/net-shares.conf` |
+| `nornir-docker/dev/example.compose.net-mounts.override.yaml` | `C:\Docker\Run\nornir-net-mounts\compose.net-mounts.override.yaml` (or `Run\nornir-dev\…`) |
+| `nornir-docker/dev/example.nas-mounts.tsv` | `C:\Docker\Run\nornir-net-mounts\net-mounts\nas-mounts.tsv` |
+| `nornir-docker/example.nornir-net-mounts.run.env` | `C:\Docker\Run\nornir-net-mounts\.run.nornir-net-mounts.env` |
+| `nornir-docker/dev/example.modules-load.net-shares.conf` | WSL `/etc/modules-load.d/net-shares.conf` |
 
-Put CIFS credentials in **`D:\Docker\Run\nornir-dev\secrets\net-creds\storage4.cred`** (`chmod 600` / tight Windows ACL). Do not commit them.
+Put CIFS credentials in a secure host folder (e.g. `C:\Users\<you>\.nornir\secrets\net-creds\storage4.cred`) with a tight ACL. Point `NORNIR_NET_CREDS_DIR_HOST` at that folder. Do not commit secrets.
 
-Windows user env (Dev Containers):
+Windows user env:
 
 - `NORNIR_MONOREPO_ROOT` — e.g. `D:\src\git\nornir`
-- `NORNIR_DOCKER_USER_ROOT` — `D:\Docker`
+- `NORNIR_DOCKER_USER_ROOT` — `C:\Docker` (or `D:\Docker`)
 
 ### 3. Load CIFS on the WSL2 host kernel
 
@@ -49,58 +45,54 @@ Containers share the WSL2 kernel. After copying `modules-load.net-shares.conf` i
 
 ```bash
 # In WSL, with systemd=true in /etc/wsl.conf:
-sudo cp /mnt/d/Docker/Run/nornir-dev/modules-load.net-shares.conf /etc/modules-load.d/net-shares.conf
+sudo cp /mnt/c/Docker/Run/nornir-net-mounts/modules-load.net-shares.conf /etc/modules-load.d/net-shares.conf
 sudo modprobe cifs
 grep cifs /proc/filesystems
 ```
 
-### 4. Env vars for Compose
+### 4. Env vars
 
-Add to **`nornir-docker/.env`** (Compose substitution for the override) **and** merge into **`D:\Docker\Run\nornir-dev\.run.nornir-dev.env`**:
-
-```env
-NORNIR_NET_MOUNTS_DIR_HOST=\\wsl.localhost\Ubuntu\mnt\d\Docker\Run\nornir-dev\net-mounts
-NORNIR_NET_CREDS_DIR_HOST=\\wsl.localhost\Ubuntu\mnt\d\Docker\Run\nornir-dev\secrets\net-creds
-```
-
-(WSL-only Compose can use `/mnt/d/Docker/Run/nornir-dev/...` instead.)
-
-Optional slow bind for `/volumes`:
+In **`.run.nornir-net-mounts.env`** (and `nornir-docker/.env` for Compose substitution when using cursor-dev):
 
 ```env
-NORNIR_VOLUMES_HOST=\\wsl.localhost\Ubuntu\mnt\nornir-volumes
+# Prefer Windows paths for PowerShell / Docker Desktop (no WSL UNC required for config binds)
+NORNIR_NET_MOUNTS_DIR_HOST=C:\Docker\Run\nornir-net-mounts\net-mounts
+NORNIR_NET_CREDS_DIR_HOST=C:\Users\<you>\.nornir\secrets\net-creds
 ```
+
+Both keys must be set when overriding the default tree under `Run\nornir-net-mounts\`.
 
 ### 5. Rebuild the image (once)
 
-The image needs `cifs-utils` and `/usr/local/bin/mount-network-shares.sh`:
+The image needs `cifs-utils`, `mount-network-shares.sh`, and `drop-sys-admin-after-mounts.sh`:
 
 ```powershell
 # from monorepo root
+docker build -f nornir-docker/prod/Dockerfile -t nornir:prod .
+# or for cursor-dev:
 docker build -f nornir-docker/dev/Dockerfile --build-arg INSTALL_MONOREPO_EDITABLES=0 -t nornir:dev-cursor-base .
 ```
 
 ---
 
-## Start container (fast `/storage4`)
+## Start container
 
-**Option A — Dev Container**
+**Build appliance**
 
-Command palette → **Dev Containers: Open Folder in Container…** →  
-`D:\Docker\Run\nornir-dev\devcontainer.json`  
-(or Rebuild Container after changing compose/env)
+```powershell
+.\nornir-docker\start-nornir-build.ps1
+```
 
-**Option B — `run-cursor-dev.ps1`**
+Grants `CAP_SYS_ADMIN` for the mount phase; entrypoint drops it after mounts succeed when `setpriv`/`capsh` are available.
 
-With `NORNIR_DOCKER_USER_ROOT=D:\Docker`, the script auto-adds  
-`D:\Docker\Run\nornir-dev\compose.net-mounts.override.yaml` when that file exists.
+**cursor-dev**
 
-**Option C — manual compose**
+With `NORNIR_DOCKER_USER_ROOT` set, `run-cursor-dev.ps1` auto-adds `compose.net-mounts.override.yaml` from `Run\nornir-net-mounts\` (or legacy `Run\nornir-dev\`) when present.
 
 ```powershell
 docker compose `
   -f nornir-docker/compose.cursor-dev.yaml `
-  -f D:/Docker/Run/nornir-dev/compose.net-mounts.override.yaml `
+  -f C:/Docker/Run/nornir-net-mounts/compose.net-mounts.override.yaml `
   run --rm --gpus all cursor-dev
 ```
 
@@ -115,11 +107,13 @@ echo "$NORNIR_NET_MOUNTS"          # expect 1
 ls /etc/nornir-net-mounts
 ls /run/secrets/net-creds
 findmnt -no FSTYPE,SOURCE /storage4
-# expect: cifs  //192.168.0.199/Data/Volumes
+# expect: cifs  //server/share
 ls /storage4 | head
+# After entry: CAP_SYS_ADMIN should be cleared when setpriv/capsh worked
+capsh --print 2>/dev/null | head -5 || true
 ```
 
-Use e.g. `/storage4/RC2/TEM` (or `/volumes/...` for the slow bind) in launch configs.
+Use e.g. `/storage4/RC2/TEM` in launch configs.
 
 ---
 
@@ -127,9 +121,9 @@ Use e.g. `/storage4/RC2/TEM` (or `/volumes/...` for the slow bind) in launch con
 
 | Symptom | Likely cause |
 |---------|----------------|
-| `/storage4` is empty / placeholder | Override not applied; check compose `-f` list and rebuild Dev Container |
-| `NORNIR_NET_MOUNTS` unset | Override missing or wrong path in `devcontainer.json` |
-| `mount: ... Operation not permitted` | Missing `SYS_ADMIN` (override not used) |
-| `mount error(2): No such file or directory` for cifs | `cifs` not in `/proc/filesystems` on WSL host |
-| `mount error(13): Permission denied` | Bad/missing `.cred`, wrong username/password, or credential file not mode 0600. Windows bind mounts often show `0777` inside the container; ``mount-network-shares.sh`` copies ``*.cred`` to ``/run/nornir-cifs-creds`` with ``0600`` before mounting (rebuild ``nornir:prod`` after updating the script). Verify ``credentials=/run/secrets/net-creds/<name>.cred`` in ``nas-mounts.tsv`` matches an existing file. |
-| Still `9p` / `drvfs` on `/storage4` | Entry script not run / old image without `mount-network-shares.sh` — rebuild image |
+| `/storage4` empty | Override / `NORNIR_NET_MOUNTS` not applied; check compose `-f` list and rebuild |
+| `NORNIR_NET_MOUNTS` unset | Override missing or wrong path |
+| `mount: ... Operation not permitted` | Missing `SYS_ADMIN` (override / launcher not used) |
+| `mount error(2)` for cifs | `cifs` not in `/proc/filesystems` on WSL host |
+| `mount error(13): Permission denied` | Bad/missing `.cred`, wrong password, or share ACL. Windows bind mounts often show `0777`; current `mount-network-shares.sh` copies `*.cred` to `/run/nornir-cifs-creds` with `0600` (rebuild image). Match `credentials=/run/secrets/net-creds/<name>.cred` in `nas-mounts.tsv` |
+| Remount fails after shell starts | Expected — `CAP_SYS_ADMIN` was dropped; restart the container to remount |

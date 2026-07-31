@@ -68,10 +68,11 @@ RUN apt-get purge -y build-essential \
 # for headless import without an X display.
 # mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
 # cifs-utils / nfs-common: optional in-container NAS mounts (NORNIR_NET_MOUNTS=1 + compose override)
+# libcap2-bin: capsh fallback to drop CAP_SYS_ADMIN after mounts
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libgl1 libosmesa6 mosquitto mosquitto-clients \
-        cifs-utils nfs-common keyutils \
+        cifs-utils nfs-common keyutils libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
@@ -123,11 +124,13 @@ RUN pip install --no-cache-dir pytest
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/bin/cursor-dev-entry.sh
 COPY nornir-docker/install-monorepo-editables.sh /usr/local/bin/install-monorepo-editables.sh
 COPY nornir-docker/mount-network-shares.sh /usr/local/bin/mount-network-shares.sh
+COPY nornir-docker/drop-sys-admin-after-mounts.sh /usr/local/bin/drop-sys-admin-after-mounts.sh
 RUN sed -i 's/\r$//' /usr/local/bin/cursor-dev-entry.sh \
     && sed -i 's/\r$//' /usr/local/bin/install-monorepo-editables.sh \
     && sed -i 's/\r$//' /usr/local/bin/mount-network-shares.sh \
+    && sed -i 's/\r$//' /usr/local/bin/drop-sys-admin-after-mounts.sh \
     && chmod +x /usr/local/bin/cursor-dev-entry.sh /usr/local/bin/install-monorepo-editables.sh \
-       /usr/local/bin/mount-network-shares.sh
+       /usr/local/bin/mount-network-shares.sh /usr/local/bin/drop-sys-admin-after-mounts.sh
 
 # Repro corpus mount point; populated at run time via compose (see INPUT_NORNIR_DATA, /data bind).
 RUN mkdir -p /data

@@ -4,8 +4,9 @@
 
 .DESCRIPTION
   When -DevParityMounts or NORNIR_WORKER_DEV_PARITY_MOUNTS=1 is set, reads mount paths from
-  $NORNIR_DOCKER_USER_ROOT/Run/nornir-dev/.run.nornir-dev.env (primary) and
-  $ScriptsRepoRoot/nornir-docker/.env (fallback for unset keys). Mirrors compose.cursor-dev.yaml binds.
+  $NORNIR_DOCKER_USER_ROOT/Run/nornir-net-mounts/.run.nornir-net-mounts.env (preferred),
+  Run/nornir-dev/.run.nornir-dev.env, and $ScriptsRepoRoot/nornir-docker/.env (fallback).
+  Mirrors cursor-dev testdata/repro binds plus path-B in-container CIFS when NORNIR_NET_* are set.
 #>
 
 function Get-NornirDotEnvValueFromFile {
@@ -52,6 +53,10 @@ function Get-NornirDevParityEnvSources {
         $DockerUserRoot = $env:NORNIR_DOCKER_USER_ROOT
     }
     if ($DockerUserRoot -and $DockerUserRoot.Trim()) {
+        $netMountsRun = Join-Path $DockerUserRoot.Trim() 'Run\nornir-net-mounts\.run.nornir-net-mounts.env'
+        if (Test-Path -LiteralPath $netMountsRun) {
+            $sources.Add($netMountsRun)
+        }
         $devRun = Join-Path $DockerUserRoot.Trim() 'Run\nornir-dev\.run.nornir-dev.env'
         if (Test-Path -LiteralPath $devRun) {
             $sources.Add($devRun)
@@ -124,13 +129,6 @@ function Add-NornirDevParityDockerRunArgs {
         [void]$args.Add('-v')
         [void]$args.Add("${legacyHost}:/legacycode:ro")
         [void]$notes.Add('legacy code -> /legacycode')
-    }
-
-    $volumesHost = _Get 'NORNIR_VOLUMES_HOST'
-    if ($volumesHost) {
-        [void]$args.Add('-v')
-        [void]$args.Add("${volumesHost}:/volumes")
-        [void]$notes.Add('NAS volumes -> /volumes')
     }
 
     $netMountsDir = _Get 'NORNIR_NET_MOUNTS_DIR_HOST'

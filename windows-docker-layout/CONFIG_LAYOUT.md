@@ -100,7 +100,7 @@ notepad D:\Docker\Run\nornir-cursor-worker\nornir-cursor-worker.run.env
 
 
 
-To give the worker the same `/volumes`, `/nornir-testdata`, etc. as **cursor-dev**, configure [`NORNIR_DEV_VOLUMES.md`](NORNIR_DEV_VOLUMES.md) under `D:\Docker\Run\nornir-dev\` first, then either:
+To give the worker the same testdata / repro / in-container CIFS paths as **cursor-dev**, configure [`NORNIR_DEV_VOLUMES.md`](NORNIR_DEV_VOLUMES.md) under `C:\Docker\Run\nornir-net-mounts\` (or legacy `Run\nornir-dev\`) first, then either:
 
 
 
@@ -110,7 +110,7 @@ To give the worker the same `/volumes`, `/nornir-testdata`, etc. as **cursor-dev
 
 
 
-Mount paths are read from `Run/nornir-dev/.run.nornir-dev.env` and `nornir-docker/.env` (not duplicated in the worker run file).
+Mount paths are read from `Run/nornir-net-mounts/.run.nornir-net-mounts.env` (preferred) and `nornir-docker/.env` (not duplicated in the worker run file). NAS uses path-B CIFS, not a host bind of the share.
 
 
 

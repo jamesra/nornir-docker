@@ -19,10 +19,9 @@
 # Legacy SCI SVN tree: NORNIR_LEGACY_CODE_HOST (default D:/src/SVN/SCI/trunk) is bind-mounted read-only
 # at /legacycode. On WSL-only Compose, use /mnt/d/src/SVN/SCI/trunk instead.
 #
-# NAS Volumes: NORNIR_VOLUMES_HOST (WSL mount of \\192.168.0.199\Data\Volumes) is bind-mounted
-# at /volumes and /storage4 (same source; /storage4 is a legacy path alias). If unset,
-# nornir-docker/dev/volumes-mount-placeholder is mounted. Docker Desktop on Windows: use
-# \\wsl.localhost\<Distro>\mnt\nornir-volumes (same style as NORNIR_TESTDATA_HOST).
+# NAS shares: use in-container CIFS (path B). Copy compose.net-mounts.override.yaml under
+# $NORNIR_DOCKER_USER_ROOT/Run/nornir-net-mounts (or Run/nornir-dev) and set
+# NORNIR_NET_MOUNTS_DIR_HOST / NORNIR_NET_CREDS_DIR_HOST. See windows-docker-layout/NORNIR_DEV_VOLUMES.md.
 #
 # On start, cursor-dev-entry.sh runs install-monorepo-editables.sh (pip install -e --no-deps from /workspace).
 #
@@ -102,18 +101,20 @@ services:
         target: /legacycode
         read_only: true
       - type: bind
-        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
-        target: /volumes
-      - type: bind
-        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
-        target: /storage4
-      - type: bind
         source: ./cursor-dev-entry.sh
         target: /usr/local/bin/cursor-dev-entry.sh
         read_only: true
       - type: bind
         source: ./install-monorepo-editables.sh
         target: /usr/local/bin/install-monorepo-editables.sh
+        read_only: true
+      - type: bind
+        source: ./drop-sys-admin-after-mounts.sh
+        target: /usr/local/bin/drop-sys-admin-after-mounts.sh
+        read_only: true
+      - type: bind
+        source: ./mount-network-shares.sh
+        target: /usr/local/bin/mount-network-shares.sh
         read_only: true
 
   cursor-dev-clone:
@@ -158,18 +159,20 @@ services:
         target: /legacycode
         read_only: true
       - type: bind
-        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
-        target: /volumes
-      - type: bind
-        source: ${NORNIR_VOLUMES_HOST:-./dev/volumes-mount-placeholder}
-        target: /storage4
-      - type: bind
         source: ./cursor-dev-entry.sh
         target: /usr/local/bin/cursor-dev-entry.sh
         read_only: true
       - type: bind
         source: ./install-monorepo-editables.sh
         target: /usr/local/bin/install-monorepo-editables.sh
+        read_only: true
+      - type: bind
+        source: ./drop-sys-admin-after-mounts.sh
+        target: /usr/local/bin/drop-sys-admin-after-mounts.sh
+        read_only: true
+      - type: bind
+        source: ./mount-network-shares.sh
+        target: /usr/local/bin/mount-network-shares.sh
         read_only: true
 
 volumes:

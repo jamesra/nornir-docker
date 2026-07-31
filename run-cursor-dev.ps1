@@ -60,15 +60,16 @@ $composeFiles = @('-f', $composeFile)
 
 $userRoot = $env:NORNIR_DOCKER_USER_ROOT
 if (-not [string]::IsNullOrWhiteSpace($userRoot)) {
-    $volumesOverride = Join-Path $userRoot 'Run\nornir-dev\compose.volumes.override.yaml'
-    if (Test-Path -LiteralPath $volumesOverride) {
-        $composeFiles += @('-f', $volumesOverride)
-        Write-Host "Using volumes override: $volumesOverride"
-    }
-    $netMountsOverride = Join-Path $userRoot 'Run\nornir-dev\compose.net-mounts.override.yaml'
-    if (Test-Path -LiteralPath $netMountsOverride) {
-        $composeFiles += @('-f', $netMountsOverride)
-        Write-Host "Using net-mounts override: $netMountsOverride"
+    foreach ($rel in @(
+            'Run\nornir-net-mounts\compose.net-mounts.override.yaml',
+            'Run\nornir-dev\compose.net-mounts.override.yaml'
+        )) {
+        $netMountsOverride = Join-Path $userRoot $rel
+        if (Test-Path -LiteralPath $netMountsOverride) {
+            $composeFiles += @('-f', $netMountsOverride)
+            Write-Host "Using net-mounts override: $netMountsOverride"
+            break
+        }
     }
 }
 

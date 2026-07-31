@@ -44,7 +44,7 @@
   Full path to the worker env file. If omitted: NORNIR_CURSOR_WORKER_ENV_FILE; then $NORNIR_DOCKER_USER_ROOT/Run/nornir-cursor-worker/nornir-cursor-worker.run.env; legacy Builds/.env.cursor-worker; nornir-docker/.env.cursor-worker. Template: example.nornir-cursor-worker.run.env.
 
 .PARAMETER DevParityMounts
-  Bind-mount cursor-dev data paths (/volumes, /nornir-testdata, etc.) using Run/nornir-dev/.run.nornir-dev.env and nornir-docker/.env. Also enabled when NORNIR_WORKER_DEV_PARITY_MOUNTS=1 in the worker run env.
+  Bind-mount cursor-dev data paths (/nornir-testdata, /data, test output, in-container CIFS) using Run/nornir-net-mounts (or legacy Run/nornir-dev) env and nornir-docker/.env. Also enabled when NORNIR_WORKER_DEV_PARITY_MOUNTS=1 in the worker run env.
 
 .PARAMETER WorkspaceMountPath
   Host directory bind-mounted at /workspace when -LiveMount or -SmokeTest is used. If omitted, uses RepoRoot (monorepo root). Ignored when -UseUniqueWorkspaceFolder is set.
