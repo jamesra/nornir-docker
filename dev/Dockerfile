@@ -81,7 +81,7 @@ ENV PIP_NO_CACHE_DIR=1 \
     PYOPENGL_PLATFORM=osmesa
 
 RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/root/scripts:/opt/venv/bin:$PATH"
 
 RUN pip install --upgrade pip setuptools wheel
 
@@ -106,6 +106,12 @@ COPY nornir-pools ./nornir-pools
 COPY nornir-imageregistration ./nornir-imageregistration
 COPY dm4 ./dm4
 COPY nornir-buildmanager ./nornir-buildmanager
+
+# TEM pipeline wrappers for interactive shells (~/scripts on PATH). Copy before optional package rm.
+RUN mkdir -p /root/scripts \
+    && cp ./nornir-buildmanager/scripts/*.sh /root/scripts/ \
+    && sed -i 's/\r$//' /root/scripts/*.sh \
+    && chmod +x /root/scripts/*.sh
 
 COPY nornir-docker/install-monorepo-editables.sh /tmp/install-monorepo-editables.sh
 
@@ -134,6 +140,30 @@ RUN sed -i 's/\r$//' /usr/local/bin/cursor-dev-entry.sh \
 
 # Repro corpus mount point; populated at run time via compose (see INPUT_NORNIR_DATA, /data bind).
 RUN mkdir -p /data
+
+# Interactive login welcome: nornir-build usage + ~/scripts entry wrappers.
+RUN printf '%s\n' \
+    '' \
+    '# Nornir welcome (interactive shells only)' \
+    'case "$-" in' \
+    '  *i*)' \
+    '    if [[ -d "${HOME}/scripts" ]]; then' \
+    '      echo ""' \
+    '      echo "Nornir"' \
+    '      echo "  nornir-build <volume_path> <Pipeline> [args...]"' \
+    '      echo "  nornir-build --help"' \
+    '      echo ""' \
+    '      echo "Scripts in ~/scripts (on PATH):"' \
+    '      for _nornir_script in "${HOME}"/scripts/[!_]*.sh; do' \
+    '        [[ -e "${_nornir_script}" ]] || continue' \
+    '        echo "  $(basename "${_nornir_script}")"' \
+    '      done' \
+    '      unset _nornir_script' \
+    '      echo ""' \
+    '    fi' \
+    '    ;;' \
+    'esac' \
+    >> /root/.bashrc
 
 WORKDIR /workspace
 CMD ["bash"]

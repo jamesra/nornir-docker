@@ -60,11 +60,28 @@ install_editables() {
   NORNIR_MONOREPO_ROOT=/workspace bash "${script}"
 }
 
+sync_home_scripts() {
+  local src="/workspace/nornir-buildmanager/scripts"
+  local dst="${HOME:-/root}/scripts"
+  if [[ -d "${src}" ]]; then
+    mkdir -p "${dst}"
+    cp -f "${src}"/*.sh "${dst}/"
+    chmod +x "${dst}"/*.sh
+  fi
+  if [[ -d "${dst}" ]]; then
+    case ":${PATH}:" in
+      *":${dst}:"*) ;;
+      *) export PATH="${dst}:${PATH}" ;;
+    esac
+  fi
+}
+
 # Mounts before SETUP_ONLY so worker/dev attach paths also get /storage4 when caps+binds are present.
 apply_network_shares
 
 if [[ "${NORNIR_CURSOR_DEV_SETUP_ONLY:-0}" == "1" ]]; then
   install_editables
+  sync_home_scripts
   if [[ $# -gt 0 ]]; then
     exec_after_mounts "$@"
   fi
@@ -202,4 +219,5 @@ else
 fi
 
 install_editables
+sync_home_scripts
 exec_after_mounts "$@"

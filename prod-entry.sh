@@ -6,6 +6,22 @@ set -euo pipefail
 
 ulimit -n 65536 2>/dev/null || true
 
+sync_home_scripts() {
+  local src="/workspace/nornir-buildmanager/scripts"
+  local dst="${HOME:-/root}/scripts"
+  if [[ -d "${src}" ]]; then
+    mkdir -p "${dst}"
+    cp -f "${src}"/*.sh "${dst}/"
+    chmod +x "${dst}"/*.sh
+  fi
+  if [[ -d "${dst}" ]]; then
+    case ":${PATH}:" in
+      *":${dst}:"*) ;;
+      *) export PATH="${dst}:${PATH}" ;;
+    esac
+  fi
+}
+
 DROPPED_MOUNTS=0
 if [[ "${NORNIR_NET_MOUNTS:-}" == "1" ]]; then
   script="/usr/local/bin/mount-network-shares.sh"
@@ -26,6 +42,8 @@ _exec_workload() {
   fi
   exec "$@"
 }
+
+sync_home_scripts
 
 if [[ $# -gt 0 ]]; then
   _exec_workload "$@"
