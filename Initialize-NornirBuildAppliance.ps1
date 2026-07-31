@@ -9,6 +9,8 @@
 
 .PARAMETER ScriptsRepoRoot
   Path to nornir monorepo (parent of nornir-docker). Alias: -MonorepoRoot.
+  When omitted, prompts with default = parent of this script's folder
+  (i.e. parent of nornir-docker). Press Enter to accept the default.
 
 .PARAMETER DockerUserRoot
   Machine-local Docker root. Default: NORNIR_DOCKER_USER_ROOT or C:\Docker.
@@ -30,8 +32,7 @@
 #>
 param(
     [Alias('MonorepoRoot')]
-    [Parameter(Mandatory = $true)]
-    [string]$ScriptsRepoRoot,
+    [string]$ScriptsRepoRoot = '',
     [string]$DockerUserRoot = '',
     [string]$Owner = '',
     [switch]$SkipPull,
@@ -50,7 +51,22 @@ catch {
 . (Join-Path $PSScriptRoot 'NornirDevRunMounts.ps1')
 . (Join-Path $PSScriptRoot 'NornirBuildDashboard.ps1')
 
+# Default monorepo = parent of nornir-docker (this script's directory).
+$defaultScriptsRepoRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ScriptsRepoRoot)) {
+    $entered = Read-Host "Nornir monorepo root [$defaultScriptsRepoRoot]"
+    if ([string]::IsNullOrWhiteSpace($entered)) {
+        $ScriptsRepoRoot = $defaultScriptsRepoRoot
+    }
+    else {
+        $ScriptsRepoRoot = $entered.Trim().Trim('"').Trim("'")
+    }
+}
+
 $DockerUserRoot = Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot
+if (-not (Test-Path -LiteralPath $ScriptsRepoRoot)) {
+    Write-Error "Monorepo root does not exist: $ScriptsRepoRoot"
+}
 $ScriptsRepoRoot = (Resolve-Path -LiteralPath $ScriptsRepoRoot).ProviderPath
 $dockerDir = Join-Path $ScriptsRepoRoot 'nornir-docker'
 if (-not (Test-Path -LiteralPath $dockerDir)) {
