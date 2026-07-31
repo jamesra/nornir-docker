@@ -26,9 +26,6 @@
 
 .PARAMETER SkipSymlink
   Do not create Builds\nornir-build\start-nornir-build.ps1 symlink.
-
-.PARAMETER PromptLogin
-  If docker pull fails with auth error, remind operator to docker login ghcr.io.
 #>
 param(
     [Alias('MonorepoRoot')]
@@ -37,8 +34,7 @@ param(
     [string]$Owner = '',
     [switch]$SkipPull,
     [switch]$SkipDashboard,
-    [switch]$SkipSymlink,
-    [switch]$PromptLogin
+    [switch]$SkipSymlink
 )
 
 $ErrorActionPreference = 'Stop'
@@ -182,9 +178,6 @@ if (-not $SkipSymlink) {
 
 if (-not $SkipPull) {
     Write-Host "Pull/retag from ghcr.io/$Owner ..."
-    if ($PromptLogin) {
-        Write-Host 'If pull fails: docker login ghcr.io -u <github-user> (PAT with read:packages)'
-    }
     $pairs = @(
         @{ Remote = "ghcr.io/$Owner/nornir:prod"; Local = 'nornir:prod' }
         @{ Remote = "ghcr.io/$Owner/nornir:cupy"; Local = 'nornir:cupy' }
@@ -192,9 +185,17 @@ if (-not $SkipPull) {
     )
     foreach ($p in $pairs) {
         Write-Host "  docker pull $($p.Remote)"
-        & docker pull $p.Remote
+        $pullOut = & docker pull $p.Remote 2>&1
+        $pullText = ($pullOut | Out-String)
+        if ($pullText.Trim().Length -gt 0) {
+            Write-Host $pullText.TrimEnd()
+        }
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "  pull failed for $($p.Remote). Login and re-run, or build locally with docker-build.ps1."
+            Write-Warning "  pull failed for $($p.Remote). Re-run after fixing auth, or build locally with docker-build.ps1."
+            # GHCR often returns unauthorized/denied; private packages may also look like "not found".
+            if ($pullText -match '(?i)unauthorized|authentication required|denied|forbidden|not found|\b401\b|\b403\b') {
+                Write-Warning '  Auth likely required: docker login ghcr.io -u <github-user> (password = PAT with read:packages)'
+            }
             continue
         }
         & docker tag $p.Remote $p.Local
