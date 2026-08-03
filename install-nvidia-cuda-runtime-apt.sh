@@ -2,7 +2,7 @@
 # Install NVIDIA CUDA user-mode runtime libraries from the Debian 12 (bookworm) network repo.
 #
 # Required:
-#   NVIDIA_CUDA_APT_VERSION  Apt metapackage suffix, e.g. 13-1 for package cuda-libraries-13-1
+#   NVIDIA_CUDA_APT_VERSION  Apt metapackage suffix, e.g. 13-3 for package cuda-libraries-13-3
 #                            (see https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/).
 #
 # Optional:
@@ -16,7 +16,7 @@
 #
 set -euo pipefail
 
-: "${NVIDIA_CUDA_APT_VERSION:?NVIDIA_CUDA_APT_VERSION is required (e.g. 13-1)}"
+: "${NVIDIA_CUDA_APT_VERSION:?NVIDIA_CUDA_APT_VERSION is required (e.g. 13-3)}"
 
 if [[ -n "${CUPY_PACKAGE:-}" ]]; then
   if [[ "${CUPY_PACKAGE}" =~ ^cupy-cuda([0-9]+)x$ ]]; then

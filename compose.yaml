@@ -22,7 +22,7 @@ services:
       dockerfile: nornir-docker/dev/Dockerfile
       args:
         CUPY_PACKAGE: cupy-cuda13x
-        NVIDIA_CUDA_APT_VERSION: ${NVIDIA_CUDA_APT_VERSION:-13-1}
+        NVIDIA_CUDA_APT_VERSION: ${NVIDIA_CUDA_APT_VERSION:-13-3}
         NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
         SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
@@ -57,7 +57,7 @@ services:
       args:
         INSTALL_CUPY: "1"
         CUPY_PACKAGE: cupy-cuda13x
-        NVIDIA_CUDA_APT_VERSION: ${NVIDIA_CUDA_APT_VERSION:-13-1}
+        NVIDIA_CUDA_APT_VERSION: ${NVIDIA_CUDA_APT_VERSION:-13-3}
         NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
         SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}

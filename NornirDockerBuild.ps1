@@ -14,6 +14,26 @@ $Script:NornirReservedBuildArgKeys = [string[]]@(
     'IMAGE_DESCRIPTION'
 )
 
+function Invoke-NornirDockerCli {
+    <#
+    .SYNOPSIS
+      Run docker; show stdout on the host and return only the native exit code.
+
+    .DESCRIPTION
+      Native docker stdout is on the success stream. If a caller assigns
+      `$code = SomeFunction` and SomeFunction runs `& docker ...` without
+      redirecting, that stdout is captured into `$code` with the intended
+      return value. Comparisons like `if ($code -ne 0)` then treat the
+      array as failure and abort multi-image builds. Pipe through Out-Host
+      so progress stays visible without polluting the return value.
+    #>
+    param(
+        [Parameter(Mandatory)][string[]]$ArgumentList
+    )
+    & docker @ArgumentList | Out-Host
+    return [int]$LASTEXITCODE
+}
+
 function Get-NornirMergedBuildArgs {
     param(
         [Parameter(Mandatory)][string]$BuildEnvRoot,
@@ -51,6 +71,55 @@ function Get-NornirMergedBuildArgs {
     return $m
 }
 
+function Write-NornirImageBuildSummary {
+    <#
+    .SYNOPSIS
+      Print Id/Created/OCI labels for a local image and optionally apply a version tag.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Tag,
+        [string]$Version = '',
+        [string]$ExpectedBuildDate = '',
+        [string]$ExpectedRevision = ''
+    )
+    $id = (& docker image inspect $Tag --format '{{.Id}}' 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($id)) {
+        Write-Warning "  Could not inspect $Tag after build"
+        return $false
+    }
+    $created = (& docker image inspect $Tag --format '{{.Created}}').Trim()
+    $rev = (& docker image inspect $Tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}').Trim()
+    $built = (& docker image inspect $Tag --format '{{index .Config.Labels "org.opencontainers.image.created"}}').Trim()
+    $verLabel = (& docker image inspect $Tag --format '{{index .Config.Labels "org.opencontainers.image.version"}}').Trim()
+    Write-Host "  Id:      $id"
+    Write-Host "  Created: $created"
+    Write-Host "  Labels:  version=$verLabel revision=$rev created=$built"
+
+    $ok = $true
+    if ($ExpectedBuildDate -and $built -ne $ExpectedBuildDate) {
+        Write-Warning "  BUILD_DATE label mismatch: expected '$ExpectedBuildDate', got '$built' (image may be a stale cache hit)"
+        $ok = $false
+    }
+    if ($ExpectedRevision -and $ExpectedRevision -ne 'unknown' -and $rev -ne $ExpectedRevision) {
+        Write-Warning "  SOURCE_REVISION label mismatch: expected '$ExpectedRevision', got '$rev'"
+        $ok = $false
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+        $suffix = $Tag.Split(':')[-1]
+        $versionTag = "nornir:${suffix}-$Version"
+        $tagExit = Invoke-NornirDockerCli -ArgumentList @('tag', $Tag, $versionTag)
+        if ($tagExit -ne 0) {
+            Write-Warning "  Failed to tag $versionTag"
+            $ok = $false
+        }
+        else {
+            Write-Host "  Also tagged: $versionTag"
+        }
+    }
+    return [bool]$ok
+}
+
 function Invoke-NornirDockerBuild {
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
@@ -61,7 +130,9 @@ function Invoke-NornirDockerBuild {
         [string]$Title = '',
         [string]$Description = '',
         [hashtable]$ExtraArgs = @{},
-        [hashtable]$OciArgs = @{}
+        [hashtable]$OciArgs = @{},
+        [switch]$NoCache,
+        [string]$VersionTag = ''
     )
     $merged = Get-NornirMergedBuildArgs -BuildEnvRoot $BuildEnvRoot -Tag $Tag -ExtraArgs $ExtraArgs
     $dockerBuildArgs = @(
@@ -69,6 +140,9 @@ function Invoke-NornirDockerBuild {
         '-f', $Dockerfile,
         '-t', $Tag
     )
+    if ($NoCache) {
+        $dockerBuildArgs += '--no-cache'
+    }
     foreach ($k in ($merged.Keys | Sort-Object)) {
         $dockerBuildArgs += @('--build-arg', "$k=$($merged[$k])")
     }
@@ -79,8 +153,22 @@ function Invoke-NornirDockerBuild {
     }
     $dockerBuildArgs += '.'
     Write-Host "docker $($dockerBuildArgs -join ' ')"
-    & docker @dockerBuildArgs
-    if ($LASTEXITCODE -ne 0) { return $LASTEXITCODE }
+    $buildExit = Invoke-NornirDockerCli -ArgumentList $dockerBuildArgs
+    if ($buildExit -ne 0) { return $buildExit }
+
+    $expectedDate = ''
+    $expectedRev = ''
+    if ($OciArgs.ContainsKey('BUILD_DATE')) { $expectedDate = [string]$OciArgs['BUILD_DATE'] }
+    if ($OciArgs.ContainsKey('SOURCE_REVISION')) { $expectedRev = [string]$OciArgs['SOURCE_REVISION'] }
+    $summaryOk = Write-NornirImageBuildSummary `
+        -Tag $Tag `
+        -Version $VersionTag `
+        -ExpectedBuildDate $expectedDate `
+        -ExpectedRevision $expectedRev
+    if (-not $summaryOk) {
+        Write-Warning "  Post-build verification reported problems for $Tag"
+        return 2
+    }
     return 0
 }
 
@@ -91,7 +179,8 @@ function Invoke-NornirCursorWorkerImagesBuild {
     #>
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
-        [string]$BuildEnvRoot = ''
+        [string]$BuildEnvRoot = '',
+        [switch]$NoCache
     )
     if ([string]::IsNullOrWhiteSpace($BuildEnvRoot)) {
         $BuildEnvRoot = (Get-Location).ProviderPath
@@ -99,13 +188,14 @@ function Invoke-NornirCursorWorkerImagesBuild {
     Write-Host "Building from: $RepoRoot"
     Push-Location -LiteralPath $RepoRoot
     try {
-        $exitCode = Invoke-NornirDockerBuild `
+        $exitCode = [int]@(Invoke-NornirDockerBuild `
             -RepoRoot $RepoRoot `
             -BuildEnvRoot $BuildEnvRoot `
             -Dockerfile 'nornir-docker/dev/Dockerfile' `
             -Tag 'nornir:dev-cursor-base' `
             -Variant 'dev' `
-            -ExtraArgs @{ INSTALL_MONOREPO_EDITABLES = '0' }
+            -ExtraArgs @{ INSTALL_MONOREPO_EDITABLES = '0' } `
+            -NoCache:$NoCache)[-1]
         if ($exitCode -ne 0) { return $exitCode }
 
         $cursorMerged = Get-NornirMergedBuildArgs -BuildEnvRoot $BuildEnvRoot -Tag 'nornir:cursor-worker' -ExtraArgs @{ BASE_IMAGE = 'nornir:dev-cursor-base' }
@@ -114,13 +204,15 @@ function Invoke-NornirCursorWorkerImagesBuild {
             '-f', 'nornir-docker/Dockerfile.cursor-worker',
             '-t', 'nornir:cursor-worker'
         )
+        if ($NoCache) {
+            $cursorWorkerArgs += '--no-cache'
+        }
         foreach ($k in ($cursorMerged.Keys | Sort-Object)) {
             $cursorWorkerArgs += @('--build-arg', "$k=$($cursorMerged[$k])")
         }
         $cursorWorkerArgs += '.'
         Write-Host "docker $($cursorWorkerArgs -join ' ')"
-        & docker @cursorWorkerArgs
-        return $LASTEXITCODE
+        return (Invoke-NornirDockerCli -ArgumentList $cursorWorkerArgs)
     }
     finally {
         Pop-Location

@@ -1,21 +1,81 @@
-# Build nornir:dev, nornir:dev-cursor-base, nornir:cursor-worker, nornir:prod, and nornir:cupy from the monorepo root.
-# Sets OCI-related build-args from VERSION, git, and release/package-versions.yaml.
-# Uses Push-Location to the repo root for docker context; on exit, error, or Ctrl+C, Pop-Location restores your invocation directory.
-#
-# Optional build-time knobs (non-secrets only; avoid PATs/API keys in build-args):
-# From the directory you invoke this script from (current working directory), before cd to repo root:
-#   build.env              — shared across all images in this run
-#   .build.<id>.env         — per image; <id> is the tag with ':' replaced by '-' (e.g. .build.nornir-dev.env for nornir:dev)
-# Precedence (highest wins): build.env < .build.<id>.env < script -ExtraArgs < fixed OCI/BOM args appended by this script.
-# Committed nornir-docker/example.*.build.env files are templates only; this script does not merge them.
+<#
+.SYNOPSIS
+  Build Nornir Docker images (dev, dev-cursor-base, cursor-worker, prod, cupy) from the monorepo root.
+
+.DESCRIPTION
+  Sets OCI-related build-args from VERSION, git, and release/package-versions.yaml.
+  Uses Push-Location to the repo root for docker context; on exit, error, or Ctrl+C,
+  Pop-Location restores your invocation directory.
+
+  Optional build-time knobs (non-secrets only; avoid PATs/API keys in build-args):
+  From the directory you invoke this script from (current working directory), before cd to repo root:
+    build.env              — shared across all images in this run
+    .build.<id>.env         — per image; <id> is the tag with ':' replaced by '-' (e.g. .build.nornir-dev.env for nornir:dev)
+  Precedence (highest wins): build.env < .build.<id>.env < script -ExtraArgs < fixed OCI/BOM args appended by this script.
+  Committed nornir-docker/example.*.build.env files are templates only; this script does not merge them.
+
+.PARAMETER Images
+  Short names or tags to build (default: all). Accepts cupy, nornir:cupy, nornir-cupy, etc.
+  Catalogue order is always used. Selecting cursor-worker also builds dev-cursor-base first.
+
+.PARAMETER NoCache
+  Pass --no-cache to each docker build.
+#>
+param(
+    [string[]]$Images = @('dev', 'dev-cursor-base', 'cursor-worker', 'prod', 'cupy'),
+    [switch]$NoCache
+)
 
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'NornirDockerBuild.ps1')
 
+$Script:NornirCatalogueOrder = @('dev', 'dev-cursor-base', 'cursor-worker', 'prod', 'cupy')
+
+function Normalize-NornirImageId {
+    param([Parameter(Mandatory)][string]$Name)
+    $n = $Name.Trim().ToLowerInvariant()
+    if ($n.StartsWith('nornir:')) {
+        $n = $n.Substring('nornir:'.Length)
+    }
+    elseif ($n.StartsWith('nornir-')) {
+        $n = $n.Substring('nornir-'.Length)
+    }
+    return $n
+}
+
+function Resolve-NornirBuildImageSet {
+    param([Parameter(Mandatory)][string[]]$Requested)
+    $allowed = $Script:NornirCatalogueOrder
+    $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($raw in $Requested) {
+        if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+        $id = Normalize-NornirImageId $raw
+        if ($allowed -notcontains $id) {
+            Write-Error ("Unknown image '$raw' (normalized '$id'). Allowed: " + ($allowed -join ', '))
+        }
+        [void]$selected.Add($id)
+    }
+    if ($selected.Count -eq 0) {
+        Write-Error ("No images selected. Allowed: " + ($allowed -join ', '))
+    }
+    if ($selected.Contains('cursor-worker')) {
+        [void]$selected.Add('dev-cursor-base')
+    }
+    $ordered = [System.Collections.Generic.List[string]]::new()
+    foreach ($id in $allowed) {
+        if ($selected.Contains($id)) {
+            $ordered.Add($id)
+        }
+    }
+    return , $ordered.ToArray()
+}
+
 # Invocation directory (e.g. D:\Docker\Builds\nornir) — NOT the script install path.
 $BuildEnvRoot = (Get-Location).ProviderPath
+$selectedImages = Resolve-NornirBuildImageSet -Requested $Images
 Write-Host ("Building docker images; build-arg env from invocation directory: " + (Get-Location).ProviderPath)
+Write-Host ("Selected: " + (($selectedImages | ForEach-Object { "nornir:$_" }) -join ', '))
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
@@ -56,96 +116,127 @@ try {
     }
 
     $ociArgs = @{
-        NORNIR_RELEASE              = $NornirRelease
-        SOURCE_REVISION             = $SourceRevision
-        BUILD_DATE                  = $BuildDate
-        IMAGE_SOURCE                = $ImageSource
-        PACKAGE_VERSIONS_JSON_B64   = $PackageVersionsB64
+        NORNIR_RELEASE            = $NornirRelease
+        SOURCE_REVISION           = $SourceRevision
+        BUILD_DATE                = $BuildDate
+        IMAGE_SOURCE              = $ImageSource
+        PACKAGE_VERSIONS_JSON_B64 = $PackageVersionsB64
     }
 
-    Write-Host "Building nornir:dev ..."
-    $exitCode = Invoke-NornirDockerBuild `
-        -RepoRoot $RepoRoot `
-        -BuildEnvRoot $BuildEnvRoot `
-        -Dockerfile 'nornir-docker/dev/Dockerfile' `
-        -Tag 'nornir:dev' `
-        -Variant 'dev' `
-        -Title 'Nornir development image' `
-        -Description 'Headless Nornir stack with pytest and CuPy for Python 3.14' `
-        -OciArgs ($ociArgs + @{
-            NORNIR_IMAGE_VARIANT = 'dev'
-            IMAGE_TITLE          = 'Nornir development image'
-            IMAGE_DESCRIPTION    = 'Headless Nornir stack with pytest and CuPy for Python 3.14'
-        })
-
-    if ($exitCode -eq 0) {
-        Write-Host "Building nornir:dev-cursor-base (no monorepo under /opt/nornir; cursor worker base) ..."
-        $exitCode = Invoke-NornirDockerBuild `
-            -RepoRoot $RepoRoot `
-            -BuildEnvRoot $BuildEnvRoot `
-            -Dockerfile 'nornir-docker/dev/Dockerfile' `
-            -Tag 'nornir:dev-cursor-base' `
-            -Variant 'dev' `
-            -Title 'Nornir cursor worker base' `
-            -Description 'Python venv + CuPy + pytest; Nornir packages from /workspace' `
-            -ExtraArgs @{ INSTALL_MONOREPO_EDITABLES = '0' } `
-            -OciArgs ($ociArgs + @{
-                NORNIR_IMAGE_VARIANT = 'dev'
-                IMAGE_TITLE          = 'Nornir cursor worker base'
-                IMAGE_DESCRIPTION    = 'Python venv + CuPy + pytest; Nornir packages from /workspace'
-            })
-    }
-
-    if ($exitCode -eq 0) {
-        Write-Host "Building nornir:cursor-worker ..."
-        $cursorMerged = Get-NornirMergedBuildArgs -BuildEnvRoot $BuildEnvRoot -Tag 'nornir:cursor-worker' -ExtraArgs @{ BASE_IMAGE = 'nornir:dev-cursor-base' }
-        $cursorWorkerArgs = @(
-            'build',
-            '-f', 'nornir-docker/Dockerfile.cursor-worker',
-            '-t', 'nornir:cursor-worker'
-        )
-        foreach ($k in ($cursorMerged.Keys | Sort-Object)) {
-            $cursorWorkerArgs += @('--build-arg', "$k=$($cursorMerged[$k])")
+    $catalogue = @(
+        @{
+            Id          = 'dev'
+            Tag         = 'nornir:dev'
+            Dockerfile  = 'nornir-docker/dev/Dockerfile'
+            Variant     = 'dev'
+            Title       = 'Nornir development image'
+            Description = 'Headless Nornir stack with pytest and CuPy for Python 3.14'
+            ExtraArgs   = @{}
+            ImageVariant = 'dev'
+            Kind        = 'standard'
+            Banner      = 'Building nornir:dev ...'
         }
-        $cursorWorkerArgs += '.'
-        Write-Host "docker $($cursorWorkerArgs -join ' ')"
-        & docker @cursorWorkerArgs
-        $exitCode = $LASTEXITCODE
-    }
+        @{
+            Id          = 'dev-cursor-base'
+            Tag         = 'nornir:dev-cursor-base'
+            Dockerfile  = 'nornir-docker/dev/Dockerfile'
+            Variant     = 'dev'
+            Title       = 'Nornir cursor worker base'
+            Description = 'Python venv + CuPy + pytest; Nornir packages from /workspace'
+            ExtraArgs   = @{ INSTALL_MONOREPO_EDITABLES = '0' }
+            ImageVariant = 'dev'
+            Kind        = 'standard'
+            Banner      = 'Building nornir:dev-cursor-base (no monorepo under /opt/nornir; cursor worker base) ...'
+        }
+        @{
+            Id   = 'cursor-worker'
+            Tag  = 'nornir:cursor-worker'
+            Kind = 'cursor-worker'
+            Banner = 'Building nornir:cursor-worker ...'
+        }
+        @{
+            Id          = 'prod'
+            Tag         = 'nornir:prod'
+            Dockerfile  = 'nornir-docker/prod/Dockerfile'
+            Variant     = 'prod'
+            Title       = 'Nornir production image (CPU)'
+            Description = 'Headless Nornir production stack for Python 3.14 without CuPy'
+            ExtraArgs   = @{}
+            ImageVariant = 'prod'
+            Kind        = 'standard'
+            Banner      = 'Building nornir:prod ...'
+        }
+        @{
+            Id          = 'cupy'
+            Tag         = 'nornir:cupy'
+            Dockerfile  = 'nornir-docker/prod/Dockerfile'
+            Variant     = 'prod-cupy'
+            Title       = 'Nornir production image (CuPy)'
+            Description = 'Headless Nornir production stack for Python 3.14 with CuPy'
+            ExtraArgs   = @{ INSTALL_CUPY = '1' }
+            ImageVariant = 'prod-cupy'
+            Kind        = 'standard'
+            Banner      = 'Building nornir:cupy ...'
+        }
+    )
 
-    if ($exitCode -eq 0) {
-        Write-Host "Building nornir:prod ..."
-        $exitCode = Invoke-NornirDockerBuild `
+    $selectedSet = [System.Collections.Generic.HashSet[string]]::new(
+        [string[]]$selectedImages,
+        [StringComparer]::OrdinalIgnoreCase
+    )
+
+    foreach ($spec in $catalogue) {
+        if (-not $selectedSet.Contains([string]$spec.Id)) {
+            continue
+        }
+        if ($exitCode -ne 0) {
+            break
+        }
+
+        Write-Host $spec.Banner
+        if ($spec.Kind -eq 'cursor-worker') {
+            $cursorMerged = Get-NornirMergedBuildArgs -BuildEnvRoot $BuildEnvRoot -Tag 'nornir:cursor-worker' -ExtraArgs @{ BASE_IMAGE = 'nornir:dev-cursor-base' }
+            $cursorWorkerArgs = @(
+                'build',
+                '-f', 'nornir-docker/Dockerfile.cursor-worker',
+                '-t', 'nornir:cursor-worker'
+            )
+            if ($NoCache) {
+                $cursorWorkerArgs += '--no-cache'
+            }
+            foreach ($k in ($cursorMerged.Keys | Sort-Object)) {
+                $cursorWorkerArgs += @('--build-arg', "$k=$($cursorMerged[$k])")
+            }
+            $cursorWorkerArgs += '.'
+            Write-Host "docker $($cursorWorkerArgs -join ' ')"
+            $exitCode = Invoke-NornirDockerCli -ArgumentList $cursorWorkerArgs
+            if ($exitCode -eq 0) {
+                $summaryOk = Write-NornirImageBuildSummary -Tag 'nornir:cursor-worker' -Version $NornirRelease
+                if (-not $summaryOk) {
+                    Write-Warning '  Post-build verification reported problems for nornir:cursor-worker'
+                    $exitCode = 2
+                }
+            }
+            continue
+        }
+
+        # Take [-1] so a leaked success-stream object cannot make ($exitCode -ne 0) true.
+        $exitCode = [int]@(Invoke-NornirDockerBuild `
             -RepoRoot $RepoRoot `
             -BuildEnvRoot $BuildEnvRoot `
-            -Dockerfile 'nornir-docker/prod/Dockerfile' `
-            -Tag 'nornir:prod' `
-            -Variant 'prod' `
-            -Title 'Nornir production image (CPU)' `
-            -Description 'Headless Nornir production stack for Python 3.14 without CuPy' `
+            -Dockerfile $spec.Dockerfile `
+            -Tag $spec.Tag `
+            -Variant $spec.Variant `
+            -Title $spec.Title `
+            -Description $spec.Description `
+            -ExtraArgs $spec.ExtraArgs `
+            -NoCache:$NoCache `
+            -VersionTag $NornirRelease `
             -OciArgs ($ociArgs + @{
-                NORNIR_IMAGE_VARIANT = 'prod'
-                IMAGE_TITLE          = 'Nornir production image (CPU)'
-                IMAGE_DESCRIPTION    = 'Headless Nornir production stack for Python 3.14 without CuPy'
-            })
-    }
-
-    if ($exitCode -eq 0) {
-        Write-Host "Building nornir:cupy ..."
-        $exitCode = Invoke-NornirDockerBuild `
-            -RepoRoot $RepoRoot `
-            -BuildEnvRoot $BuildEnvRoot `
-            -Dockerfile 'nornir-docker/prod/Dockerfile' `
-            -Tag 'nornir:cupy' `
-            -Variant 'prod-cupy' `
-            -Title 'Nornir production image (CuPy)' `
-            -Description 'Headless Nornir production stack for Python 3.14 with CuPy' `
-            -ExtraArgs @{ INSTALL_CUPY = '1' } `
-            -OciArgs ($ociArgs + @{
-                NORNIR_IMAGE_VARIANT = 'prod-cupy'
-                IMAGE_TITLE          = 'Nornir production image (CuPy)'
-                IMAGE_DESCRIPTION    = 'Headless Nornir production stack for Python 3.14 with CuPy'
-            })
+                NORNIR_IMAGE_VARIANT = $spec.ImageVariant
+                IMAGE_TITLE          = $spec.Title
+                IMAGE_DESCRIPTION    = $spec.Description
+            }))[-1]
     }
 
     if ($exitCode -eq 0) {
@@ -156,4 +247,4 @@ finally {
     Pop-Location
 }
 
-exit $exitCode
+exit ([int]$exitCode)

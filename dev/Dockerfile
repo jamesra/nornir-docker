@@ -32,7 +32,7 @@ ARG MAGICKVERSION=7.1.1-27
 # Default CuPy wheel = highest CUDA major offered for current CuPy (see docs.cupy.dev install matrix).
 ARG CUPY_PACKAGE=cupy-cuda13x
 # NVIDIA Debian 12 metapackage suffix (cuda-libraries-${NVIDIA_CUDA_APT_VERSION}); stay within CuPy-supported toolkit for that wheel.
-ARG NVIDIA_CUDA_APT_VERSION=13-1
+ARG NVIDIA_CUDA_APT_VERSION=13-3
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -108,10 +108,14 @@ COPY dm4 ./dm4
 COPY nornir-buildmanager ./nornir-buildmanager
 
 # TEM pipeline wrappers for interactive shells (~/scripts on PATH). Copy before optional package rm.
+# Install TEM* without .sh; keep _nornir_tem_common.sh for sourced helpers.
 RUN mkdir -p /root/scripts \
-    && cp ./nornir-buildmanager/scripts/*.sh /root/scripts/ \
-    && sed -i 's/\r$//' /root/scripts/*.sh \
-    && chmod +x /root/scripts/*.sh
+    && for f in ./nornir-buildmanager/scripts/TEM*.sh; do \
+         cp "$f" "/root/scripts/$(basename "${f%.sh}")"; \
+       done \
+    && cp ./nornir-buildmanager/scripts/_nornir_tem_common.sh /root/scripts/ \
+    && sed -i 's/\r$//' /root/scripts/* \
+    && chmod +x /root/scripts/*
 
 COPY nornir-docker/install-monorepo-editables.sh /tmp/install-monorepo-editables.sh
 
@@ -154,8 +158,8 @@ RUN printf '%s\n' \
     '      echo "  nornir-build --help"' \
     '      echo ""' \
     '      echo "Scripts in ~/scripts (on PATH):"' \
-    '      for _nornir_script in "${HOME}"/scripts/[!_]*.sh; do' \
-    '        [[ -e "${_nornir_script}" ]] || continue' \
+    '      for _nornir_script in "${HOME}"/scripts/TEM*; do' \
+    '        [[ -e "${_nornir_script}" && -x "${_nornir_script}" ]] || continue' \
     '        echo "  $(basename "${_nornir_script}")"' \
     '      done' \
     '      unset _nornir_script' \
@@ -164,6 +168,18 @@ RUN printf '%s\n' \
     '    ;;' \
     'esac' \
     >> /root/.bashrc
+
+# Final cache-busting stamp: re-declare ARGs so a new BUILD_DATE/SOURCE_REVISION always
+# produces a new top layer and image digest even when package COPY layers are cached.
+ARG NORNIR_RELEASE=0.0.0-dev
+ARG SOURCE_REVISION=unknown
+ARG BUILD_DATE=unknown
+RUN printf '%s\n' \
+        "release=${NORNIR_RELEASE}" \
+        "revision=${SOURCE_REVISION}" \
+        "built=${BUILD_DATE}" \
+        > /etc/nornir-image-info \
+    && chmod 644 /etc/nornir-image-info
 
 WORKDIR /workspace
 CMD ["bash"]

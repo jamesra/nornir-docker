@@ -9,10 +9,22 @@ ulimit -n 65536 2>/dev/null || true
 sync_home_scripts() {
   local src="/workspace/nornir-buildmanager/scripts"
   local dst="${HOME:-/root}/scripts"
+  local f
+  local base
   if [[ -d "${src}" ]]; then
     mkdir -p "${dst}"
-    cp -f "${src}"/*.sh "${dst}/"
-    chmod +x "${dst}"/*.sh
+    # TEM* → extensionless on PATH; keep _nornir_tem_common.sh for source paths.
+    rm -f "${dst}"/TEM*.sh
+    for f in "${src}"/TEM*.sh; do
+      [[ -e "${f}" ]] || continue
+      base="$(basename "${f}")"
+      cp -f "${f}" "${dst}/${base%.sh}"
+      chmod +x "${dst}/${base%.sh}"
+    done
+    if [[ -f "${src}/_nornir_tem_common.sh" ]]; then
+      cp -f "${src}/_nornir_tem_common.sh" "${dst}/"
+      chmod +x "${dst}/_nornir_tem_common.sh"
+    fi
   fi
   if [[ -d "${dst}" ]]; then
     case ":${PATH}:" in

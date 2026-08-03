@@ -28,7 +28,7 @@ Full operational documentation lives in the **Nornir monodoc**:
 
 | Script | Phase | Purpose |
 |--------|--------|---------|
-| ``docker-build.ps1`` / ``build.cmd`` | Build | All images with OCI labels + BOM JSON from **monorepo root**. Optional build-args from **invocation directory** only: ``build.env`` then ``.build.<id>.env`` per image; logs each path as merged or not found (see script header). Committed ``example.*.build.env`` are templates, not read by the script. |
+| ``docker-build.ps1`` / ``build.cmd`` | Build | OCI labels + BOM JSON from **monorepo root**. Optional ``-Images`` (e.g. ``prod,cupy``) and ``-NoCache``. Build-args from **invocation directory** only: ``build.env`` then ``.build.<id>.env`` per image; logs each path as merged or not found (see script header). Committed ``example.*.build.env`` are templates, not read by the script. |
 | ``docker-push.ps1`` | Publish | Tag/push ``nornir:dev``, ``dev-cursor-base``, ``prod``, ``cupy`` (and optional ``nornir-dashboard``) to ``ghcr.io``. |
 | ``Initialize-NornirBuildAppliance.ps1`` | Run | One-shot layout + templates + GHCR pull + co-located dashboard for the build appliance. |
 | ``start-nornir-build.ps1`` | Run | Everyday appliance shell: unique workspace, path-B CIFS from ``Run\nornir-net-mounts``, GPU image pick. |
@@ -58,8 +58,8 @@ Compose stacks and ``docker run`` launchers set ``nofile`` soft/hard **65536** s
 
 Headless images use ``pip install cupy-cuda13x`` (or another ``cupy-cudaNx`` wheel). That wheel still needs **NVIDIA user-mode libraries** on the system (e.g. cuBLAS / libcublasLt) so CuPy can load them at runtime.
 
-- **Install path:** ``install-nvidia-cuda-runtime-apt.sh`` adds NVIDIA’s **Debian 12** repo and installs ``cuda-libraries-*`` plus **development** packages ``cuda-cudart-dev-*``, ``cuda-nvrtc-dev-*``, and ``cuda-cccl-*`` for the same ``NVIDIA_CUDA_APT_VERSION`` (default **``13-1``**). The extra packages supply headers such as ``cuda_fp16.h`` required for **NVRTC** compilation (e.g. ``cupyx.scipy.ndimage.map_coordinates``); runtime-only ``cuda-libraries-*`` alone is not enough. See https://docs.cupy.dev/en/stable/install.html and the CuPy note on ``NVRTC_ERROR_COMPILATION`` / missing ``vector_types.h`` or ``cuda_fp16.h``.
-- **Build args:** ``NVIDIA_CUDA_APT_VERSION`` (default ``13-1``) must match the **CUDA major** of ``CUPY_PACKAGE`` (e.g. ``cupy-cuda12x`` with ``NVIDIA_CUDA_APT_VERSION=12-6``). The script fails if majors disagree.
+- **Install path:** ``install-nvidia-cuda-runtime-apt.sh`` adds NVIDIA’s **Debian 12** repo and installs ``cuda-libraries-*`` plus **development** packages ``cuda-cudart-dev-*``, ``cuda-nvrtc-dev-*``, and ``cuda-cccl-*`` for the same ``NVIDIA_CUDA_APT_VERSION`` (default **``13-3``**). The extra packages supply headers such as ``cuda_fp16.h`` required for **NVRTC** compilation (e.g. ``cupyx.scipy.ndimage.map_coordinates``); runtime-only ``cuda-libraries-*`` alone is not enough. See https://docs.cupy.dev/en/stable/install.html and the CuPy note on ``NVRTC_ERROR_COMPILATION`` / missing ``vector_types.h`` or ``cuda_fp16.h``.
+- **Build args:** ``NVIDIA_CUDA_APT_VERSION`` (default ``13-3``) must match the **CUDA major** of ``CUPY_PACKAGE`` (e.g. ``cupy-cuda12x`` with ``NVIDIA_CUDA_APT_VERSION=12-6``). The script fails if majors disagree.
 - **Prod CPU image:** ``INSTALL_CUPY=0`` skips the script and CuPy. ``INSTALL_CUPY=1`` runs the script then installs the CuPy wheel.
 - **Host:** You still need an NVIDIA driver, the Container Toolkit, and typically ``--gpus all`` for GPU work inside the container.
 
