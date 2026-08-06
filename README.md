@@ -30,6 +30,7 @@ Full operational documentation lives in the **Nornir monodoc**:
 |--------|--------|---------|
 | ``docker-build.ps1`` / ``build.cmd`` | Build | OCI labels + BOM JSON from **monorepo root**. Optional ``-Images`` (e.g. ``prod,cupy``) and ``-NoCache``. Build-args from **invocation directory** only: ``build.env`` then ``.build.<id>.env`` per image; logs each path as merged or not found (see script header). Committed ``example.*.build.env`` are templates, not read by the script. |
 | ``docker-push.ps1`` | Publish | Tag/push ``nornir:dev``, ``dev-cursor-base``, ``prod``, ``cupy`` (and optional ``nornir-dashboard``) to ``ghcr.io``. |
+| ``docker-pull.ps1`` | Publish | Pull from ``ghcr.io`` and retag locally as ``nornir:<tag>`` (default ``prod``, ``cupy``; optional dashboard / versioned tags). |
 | ``Initialize-NornirBuildAppliance.ps1`` | Run | One-shot layout + templates + GHCR pull + co-located dashboard for the build appliance. |
 | ``start-nornir-build.ps1`` | Run | Everyday appliance shell: unique workspace, path-B CIFS from ``Run\nornir-net-mounts``, GPU image pick. |
 | ``start-dashboard.ps1`` | Run | Start/restart Mosquitto + ``nornir-dashboard`` (``compose.dashboard.yaml``). Use ``-Rebuild`` (optional ``-NoCache``) to rebuild the dashboard image from ``nornir-builddashboard`` and recreate the container when deploying local UI/backend changes. |
