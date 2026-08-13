@@ -38,6 +38,7 @@ x-cursor-dev-app: &cursor-dev-app
     dockerfile: nornir-docker/dev/Dockerfile
     args:
       CUPY_PACKAGE: cupy-cuda13x
+      CUVS_PACKAGE: cuvs-cu13
       NVIDIA_CUDA_APT_VERSION: ${NVIDIA_CUDA_APT_VERSION:-13-3}
       NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
       SOURCE_REVISION: ${SOURCE_REVISION:-unknown}

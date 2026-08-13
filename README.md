@@ -57,11 +57,13 @@ Compose stacks and ``docker run`` launchers set ``nofile`` soft/hard **65536** s
 
 ## CUDA runtime in dev / prod images (GPU)
 
-Headless images use ``pip install cupy-cuda13x`` (or another ``cupy-cudaNx`` wheel). That wheel still needs **NVIDIA user-mode libraries** on the system (e.g. cuBLAS / libcublasLt) so CuPy can load them at runtime.
+Headless images use ``pip install cupy-cuda13x`` (or another ``cupy-cudaNx`` wheel) plus
+``cuvs-cu13`` (or ``cuvs-cuN`` matching that CUDA major) so ``nornir_imageregistration.HasCuVS()``
+is true. The CuPy wheel still needs **NVIDIA user-mode libraries** on the system (e.g. cuBLAS / libcublasLt) so CuPy can load them at runtime.
 
 - **Install path:** ``install-nvidia-cuda-runtime-apt.sh`` adds NVIDIA’s **Debian 12** repo and installs ``cuda-libraries-*`` plus **development** packages ``cuda-cudart-dev-*``, ``cuda-nvrtc-dev-*``, and ``cuda-cccl-*`` for the same ``NVIDIA_CUDA_APT_VERSION`` (default **``13-3``**). The extra packages supply headers such as ``cuda_fp16.h`` required for **NVRTC** compilation (e.g. ``cupyx.scipy.ndimage.map_coordinates``); runtime-only ``cuda-libraries-*`` alone is not enough. See https://docs.cupy.dev/en/stable/install.html and the CuPy note on ``NVRTC_ERROR_COMPILATION`` / missing ``vector_types.h`` or ``cuda_fp16.h``.
 - **Build args:** ``NVIDIA_CUDA_APT_VERSION`` (default ``13-3``) must match the **CUDA major** of ``CUPY_PACKAGE`` (e.g. ``cupy-cuda12x`` with ``NVIDIA_CUDA_APT_VERSION=12-6``). The script fails if majors disagree.
-- **Prod CPU image:** ``INSTALL_CUPY=0`` skips the script and CuPy. ``INSTALL_CUPY=1`` runs the script then installs the CuPy wheel.
+- **Prod CPU image:** ``INSTALL_CUPY=0`` skips the script, CuPy, and cuVS. ``INSTALL_CUPY=1`` runs the script then installs the CuPy and cuVS wheels.
 - **Host:** You still need an NVIDIA driver, the Container Toolkit, and typically ``--gpus all`` for GPU work inside the container.
 
 Compose can set ``NVIDIA_CUDA_APT_VERSION`` via environment (see ``compose.yaml`` and ``compose.cursor-dev.yaml`` ``build.args``).
@@ -93,4 +95,4 @@ Point ``nornir-build`` at the broker with ``NORNIR_MQTT_HOST`` /
 trusted network because authentication is anonymous. See
 ``nornir-builddashboard/README.md`` and ``nornir-shared/README_MQTT.md``.
 
-When CuPy adds a new ``cupy-cudaNx`` default, bump ``CUPY_PACKAGE`` and ``NVIDIA_CUDA_APT_VERSION`` together and confirm all four package families exist on NVIDIA’s Debian 12 index for that suffix.
+When CuPy adds a new ``cupy-cudaNx`` default, bump ``CUPY_PACKAGE``, ``CUVS_PACKAGE``, and ``NVIDIA_CUDA_APT_VERSION`` together and confirm all four package families exist on NVIDIA’s Debian 12 index for that suffix.

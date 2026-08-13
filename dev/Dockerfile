@@ -31,6 +31,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG MAGICKVERSION=7.1.1-27
 # Default CuPy wheel = highest CUDA major offered for current CuPy (see docs.cupy.dev install matrix).
 ARG CUPY_PACKAGE=cupy-cuda13x
+# RAPIDS cuVS (GPU pairwise distance / NN). CUDA major must match CUPY_PACKAGE (cuvs-cu13 with cupy-cuda13x).
+ARG CUVS_PACKAGE=cuvs-cu13
 # NVIDIA Debian 12 metapackage suffix (cuda-libraries-${NVIDIA_CUDA_APT_VERSION}); stay within CuPy-supported toolkit for that wheel.
 ARG NVIDIA_CUDA_APT_VERSION=13-3
 
@@ -95,9 +97,9 @@ COPY nornir-docker/constraints-headless.txt /tmp/constraints-headless.txt
 RUN pip install --no-cache-dir -r /tmp/constraints-headless.txt \
     && rm -f /tmp/constraints-headless.txt
 
-RUN pip install --no-cache-dir "${CUPY_PACKAGE}" 
+RUN pip install --no-cache-dir "${CUPY_PACKAGE}" "${CUVS_PACKAGE}" 
 
-# Cursor worker builds with INSTALL_MONOREPO_EDITABLES=0: venv + CuPy only; packages come from /workspace (cursor-dev-entry.sh).
+# Cursor worker builds with INSTALL_MONOREPO_EDITABLES=0: venv + CuPy + cuVS only; packages come from /workspace (cursor-dev-entry.sh).
 ARG INSTALL_MONOREPO_EDITABLES=1
 WORKDIR /opt/nornir
 COPY nornir-shared ./nornir-shared

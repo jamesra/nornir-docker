@@ -6,7 +6,7 @@
 # Production + CuPy (same Dockerfile):
 #   docker build -f nornir-docker/prod/Dockerfile --build-arg INSTALL_CUPY=1 -t nornir:cupy .
 #
-# Optional override: --build-arg CUPY_PACKAGE=cupy-cuda12x --build-arg NVIDIA_CUDA_APT_VERSION=12-6 (majors must match).
+# Optional override: --build-arg CUPY_PACKAGE=cupy-cuda12x --build-arg CUVS_PACKAGE=cuvs-cu12 --build-arg NVIDIA_CUDA_APT_VERSION=12-6 (majors must match).
 #
 # Headless Nornir stack (no Pyre). Python 3.14 + ImageMagick 7. No pytest (see dev/Dockerfile).
 
@@ -35,6 +35,8 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG MAGICKVERSION=7.1.1-27
 ARG INSTALL_CUPY=0
 ARG CUPY_PACKAGE=cupy-cuda13x
+# RAPIDS cuVS (GPU pairwise distance / NN). Installed only with CuPy; CUDA major must match CUPY_PACKAGE.
+ARG CUVS_PACKAGE=cuvs-cu13
 ARG NVIDIA_CUDA_APT_VERSION=13-3
 
 RUN apt-get update \
@@ -95,7 +97,7 @@ RUN set -eux; \
         chmod +x /tmp/install-nvidia-cuda-runtime-apt.sh \
         && NVIDIA_CUDA_APT_VERSION="${NVIDIA_CUDA_APT_VERSION}" CUPY_PACKAGE="${CUPY_PACKAGE}" \
            /tmp/install-nvidia-cuda-runtime-apt.sh \
-        && pip install --no-cache-dir "${CUPY_PACKAGE}"; \
+        && pip install --no-cache-dir "${CUPY_PACKAGE}" "${CUVS_PACKAGE}"; \
     fi; \
     rm -f /tmp/install-nvidia-cuda-runtime-apt.sh
 

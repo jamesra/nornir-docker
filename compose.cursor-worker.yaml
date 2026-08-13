@@ -41,6 +41,7 @@ services:
       args:
         INSTALL_MONOREPO_EDITABLES: "0"
         CUPY_PACKAGE: cupy-cuda13x
+        CUVS_PACKAGE: cuvs-cu13
         NORNIR_RELEASE: ${NORNIR_RELEASE:-0.0.0-dev}
         SOURCE_REVISION: ${SOURCE_REVISION:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
