@@ -42,6 +42,10 @@ services:
       NORNIR_DASHBOARD_MAX_EVENTS: "${NORNIR_DASHBOARD_MAX_EVENTS:-0}"
       NORNIR_DASHBOARD_STALE_AFTER: "${NORNIR_DASHBOARD_STALE_AFTER:-600}"
       NORNIR_DASHBOARD_RETENTION_DAYS: "${NORNIR_DASHBOARD_RETENTION_DAYS:-30}"
+      # The published port below binds to loopback by default. Set a token (and
+      # optionally disable deletion) before widening NORNIR_DASHBOARD_BIND_HOST.
+      NORNIR_DASHBOARD_TOKEN: "${NORNIR_DASHBOARD_TOKEN:-}"
+      NORNIR_DASHBOARD_ALLOW_DELETE: "${NORNIR_DASHBOARD_ALLOW_DELETE:-1}"
     ports:
       - "${NORNIR_DASHBOARD_BIND_HOST:-127.0.0.1}:8087:8087"
     volumes:

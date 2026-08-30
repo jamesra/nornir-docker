@@ -129,8 +129,12 @@ RUN chmod +x /tmp/install-monorepo-editables.sh \
     fi \
     && rm -f /tmp/install-monorepo-editables.sh
 
-# Dev/test tooling (not in prod image)
-RUN pip install --no-cache-dir pytest
+# Dev/test tooling (not in prod image).
+# fastapi/uvicorn/httpx are the nornir-builddashboard test dependencies: without
+# them its app tests cannot be collected, so the package had no test signal in
+# the standard dev environment.
+RUN pip install --no-cache-dir pytest \
+      "fastapi >= 0.110" "uvicorn[standard] >= 0.29" "httpx >= 0.27"
 
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/bin/cursor-dev-entry.sh
 COPY nornir-docker/install-monorepo-editables.sh /usr/local/bin/install-monorepo-editables.sh
