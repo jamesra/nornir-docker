@@ -106,6 +106,10 @@ services:
         target: /usr/local/bin/cursor-dev-entry.sh
         read_only: true
       - type: bind
+        source: ./submodule-sync.sh
+        target: /usr/local/lib/nornir-docker/submodule-sync.sh
+        read_only: true
+      - type: bind
         source: ./install-monorepo-editables.sh
         target: /usr/local/bin/install-monorepo-editables.sh
         read_only: true
@@ -162,6 +166,10 @@ services:
       - type: bind
         source: ./cursor-dev-entry.sh
         target: /usr/local/bin/cursor-dev-entry.sh
+        read_only: true
+      - type: bind
+        source: ./submodule-sync.sh
+        target: /usr/local/lib/nornir-docker/submodule-sync.sh
         read_only: true
       - type: bind
         source: ./install-monorepo-editables.sh

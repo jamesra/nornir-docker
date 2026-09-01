@@ -2,6 +2,8 @@
 # Prepare /workspace (bind mount or volume): optional clone/update, then editable pip installs
 # (same order as nornir-docker/dev/Dockerfile).
 # NORNIR_WORKSPACE_STRATEGY=mounted (default): bind-mounted checkout - git fetch only unless NORNIR_SYNC_REMOTE=1.
+#   Submodule sync: init missing submodules only; preserves existing checkouts (see submodule-sync.sh).
+#   Set NORNIR_SUBMODULE_UPDATE=1 to checkout umbrella-recorded submodule SHAs (after pointer bumps).
 # NORNIR_WORKSPACE_STRATEGY=clone: named volume / appliance - clone if empty; refresh branch when .git exists.
 # NORNIR_CURSOR_DEV_SETUP_ONLY=1: pip install -e only (used by cursor-worker-entry.sh after git prep).
 # NORNIR_NET_MOUNTS=1: apply /etc/nornir-net-mounts/nas-mounts.tsv (CIFS/NFS) via mount-network-shares.sh.
@@ -121,14 +123,19 @@ workspace_nonempty() {
   [[ -n "$(ls -A /workspace 2>/dev/null || true)" ]]
 }
 
-configure_git_for_submodules() {
-  local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-  if [[ -n "${token}" ]]; then
-    git config --global url."https://x-access-token:${token}@github.com/".insteadOf "https://github.com/"
-    git config --global url."https://x-access-token:${token}@github.com/".insteadOf "git@github.com:"
-  else
-    git config --global url."https://github.com/".insteadOf "git@github.com:" 2>/dev/null || true
-  fi
+source_submodule_sync() {
+  local script
+  for script in \
+    /usr/local/lib/nornir-docker/submodule-sync.sh \
+    /workspace/nornir-docker/submodule-sync.sh; do
+    if [[ -f "${script}" ]]; then
+      # shellcheck source=submodule-sync.sh
+      source "${script}"
+      return 0
+    fi
+  done
+  echo "cursor-dev-entry: missing submodule-sync.sh" >&2
+  exit 1
 }
 
 repair_broken_submodule_gitdirs() {
@@ -148,16 +155,9 @@ repair_broken_submodule_gitdirs() {
   done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' 2>/dev/null | awk '{print $2}')
 }
 
-sync_submodules_best_effort() {
-  configure_git_for_submodules
-  git submodule sync --recursive 2>/dev/null || true
-  if ! git submodule update --init --recursive 2>/dev/null; then
-    echo "cursor-dev-entry: warning: submodule update had errors (private repos may need GITHUB_TOKEN in the container env)." >&2
-  fi
-}
-
 clone_shallow_or_full() {
-  configure_git_for_submodules
+  source_submodule_sync
+  _submodule_sync_configure_git
   local d="${NORNIR_CLONE_DEPTH:-1}"
   if [[ "${WORKSPACE_STRATEGY}" == "clone" && "${d}" != "0" && "${d}" != "full" ]]; then
     d="0"
@@ -194,10 +194,12 @@ ensure_clone_strategy() {
     cd /workspace
   fi
 
-  sync_submodules_best_effort
+  source_submodule_sync
+  submodule_sync_full
 }
 
 prepare_mounted_workspace() {
+  source_submodule_sync
   if [[ ! -d /workspace/.git ]]; then
     if workspace_nonempty; then
       echo "ERROR: /workspace is not empty but is not a git repo; refusing to clone into it." >&2
@@ -205,7 +207,7 @@ prepare_mounted_workspace() {
     fi
     clone_shallow_or_full
     cd /workspace
-    sync_submodules_best_effort
+    submodule_sync_full
     return 0
   fi
 
@@ -221,7 +223,7 @@ prepare_mounted_workspace() {
     }
   fi
 
-  sync_submodules_best_effort
+  submodule_sync_mounted
 }
 
 if [[ "${WORKSPACE_STRATEGY}" == "clone" ]]; then

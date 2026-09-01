@@ -91,6 +91,18 @@ prepare_mounted_workspace() {
     }
   fi
 
+  local sync_script
+  for sync_script in \
+    /usr/local/lib/nornir-docker/submodule-sync.sh \
+    "${WORKSPACE}/nornir-docker/submodule-sync.sh"; do
+    if [[ -f "${sync_script}" ]]; then
+      # shellcheck source=submodule-sync.sh
+      source "${sync_script}"
+      submodule_sync_mounted
+      return 0
+    fi
+  done
+  echo "cursor-worker-entry: missing submodule-sync.sh; falling back to full submodule update" >&2
   git submodule sync --recursive 2>/dev/null || true
   git submodule update --init --recursive
 }

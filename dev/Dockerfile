@@ -137,14 +137,17 @@ RUN pip install --no-cache-dir pytest \
       "fastapi >= 0.110" "uvicorn[standard] >= 0.29" "httpx >= 0.27"
 
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/bin/cursor-dev-entry.sh
+COPY nornir-docker/submodule-sync.sh /usr/local/lib/nornir-docker/submodule-sync.sh
 COPY nornir-docker/install-monorepo-editables.sh /usr/local/bin/install-monorepo-editables.sh
 COPY nornir-docker/mount-network-shares.sh /usr/local/bin/mount-network-shares.sh
 COPY nornir-docker/drop-sys-admin-after-mounts.sh /usr/local/bin/drop-sys-admin-after-mounts.sh
 RUN sed -i 's/\r$//' /usr/local/bin/cursor-dev-entry.sh \
+    && sed -i 's/\r$//' /usr/local/lib/nornir-docker/submodule-sync.sh \
     && sed -i 's/\r$//' /usr/local/bin/install-monorepo-editables.sh \
     && sed -i 's/\r$//' /usr/local/bin/mount-network-shares.sh \
     && sed -i 's/\r$//' /usr/local/bin/drop-sys-admin-after-mounts.sh \
-    && chmod +x /usr/local/bin/cursor-dev-entry.sh /usr/local/bin/install-monorepo-editables.sh \
+    && chmod +x /usr/local/bin/cursor-dev-entry.sh /usr/local/lib/nornir-docker/submodule-sync.sh \
+       /usr/local/bin/install-monorepo-editables.sh \
        /usr/local/bin/mount-network-shares.sh /usr/local/bin/drop-sys-admin-after-mounts.sh
 
 # Repro corpus mount point; populated at run time via compose (see INPUT_NORNIR_DATA, /data bind).
