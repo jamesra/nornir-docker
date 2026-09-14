@@ -92,11 +92,41 @@ function Invoke-DashboardCompose {
         [Parameter(Mandatory = $true)]
         [string[]]$ComposeArgs
     )
-    # Native docker compose stdout must not enter the PowerShell pipeline: assigning
-    # $code = Invoke-DashboardCompose ... would capture log lines, and ($code -ne 0)
-    # would then look like a failure even when the exit code was 0.
-    & docker compose -p $ComposeProject -f $composeFile @envFiles @ComposeArgs | Out-Host
-    return [int]$LASTEXITCODE
+    # Do not pipe `docker compose` through Out-Host/Out-Null: on Windows that
+    # redirects stdout and Compose often fails with
+    # "failed to get console: The handle is invalid".
+    # Do not let Compose stdout enter the PowerShell success stream either:
+    # `$code = Invoke-DashboardCompose ...` would then capture log lines and
+    # break `($code -ne 0)` checks. Start-Process keeps the console and
+    # returns only the process exit code.
+    if ([string]::IsNullOrWhiteSpace($env:COMPOSE_PROGRESS)) {
+        $env:COMPOSE_PROGRESS = 'plain'
+    }
+    if ([string]::IsNullOrWhiteSpace($env:COMPOSE_ANSI)) {
+        $env:COMPOSE_ANSI = 'never'
+    }
+
+    $dockerCmd = Get-Command docker -ErrorAction Stop
+    $argList = [System.Collections.Generic.List[string]]::new()
+    [void]$argList.Add('compose')
+    [void]$argList.Add('-p')
+    [void]$argList.Add($ComposeProject)
+    [void]$argList.Add('-f')
+    [void]$argList.Add($composeFile)
+    foreach ($item in $envFiles) {
+        [void]$argList.Add([string]$item)
+    }
+    foreach ($item in $ComposeArgs) {
+        [void]$argList.Add([string]$item)
+    }
+
+    $proc = Start-Process -FilePath $dockerCmd.Source `
+        -ArgumentList $argList.ToArray() `
+        -NoNewWindow -Wait -PassThru
+    if ($null -eq $proc) {
+        return 1
+    }
+    return [int]$proc.ExitCode
 }
 
 function Test-DashboardServiceRunning {
@@ -121,6 +151,31 @@ function Test-DashboardHttp {
     }
     catch {
         return $false
+    }
+}
+
+function Repair-DashboardDataVolumeOwnership {
+    # Compose names the volume ``<project>_dashboard-data``. Older images (or a
+    # root one-shot) may leave SQLite owned by root; USER 10001 then crashes with
+    # "attempt to write a readonly database".
+    $volumeName = "${ComposeProject}_dashboard-data"
+    & docker volume inspect $volumeName 1>$null 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return
+    }
+
+    Write-Host "Ensuring $volumeName is owned by uid 10001 (dashboard)..."
+    $dockerCmd = Get-Command docker -ErrorAction Stop
+    $proc = Start-Process -FilePath $dockerCmd.Source -ArgumentList @(
+        'run', '--rm',
+        '-u', '0',
+        '-v', "${volumeName}:/data",
+        'alpine',
+        'chown', '-R', '10001:10001', '/data'
+    ) -NoNewWindow -Wait -PassThru
+    if ($null -eq $proc -or $proc.ExitCode -ne 0) {
+        $code = if ($null -eq $proc) { 'null' } else { $proc.ExitCode }
+        Write-Warning "Could not chown $volumeName (exit $code)"
     }
 }
 
@@ -171,6 +226,8 @@ try {
                 Write-Warning "docker compose rm returned exit $code for nornir-dashboard; continuing with recreate"
             }
 
+            Repair-DashboardDataVolumeOwnership
+
             Write-Host 'Recreating nornir-dashboard container (Mosquitto left running)...'
             $code = Invoke-DashboardCompose -ComposeArgs @(
                 'up', '-d', '--no-deps', 'nornir-dashboard'
@@ -185,6 +242,7 @@ try {
             }
         }
         else {
+            Repair-DashboardDataVolumeOwnership
             $code = Invoke-DashboardCompose -ComposeArgs @('up', '-d')
             if ($code -ne 0) {
                 # Host mosquitto (or another stack) may already own :1883; dashboard UI alone is enough.
