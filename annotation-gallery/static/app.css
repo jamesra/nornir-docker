@@ -1,0 +1,157 @@
+:root {
+  color-scheme: dark;
+  --bg: #121418;
+  --panel: #1c2028;
+  --ink: #e8eaed;
+  --muted: #9aa3af;
+  --accent: #7dd3fc;
+  --danger: #f87171;
+  --ok: #4ade80;
+  --card: #0f1217;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid #2a313c;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.who { margin: 0; color: var(--muted); }
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 16px;
+  background: #161a20;
+  border-bottom: 1px solid #2a313c;
+}
+
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filters input, .filters select {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid #343b46;
+  border-radius: 4px;
+  padding: 4px 8px;
+  min-width: 9rem;
+}
+
+.status {
+  margin: 8px 16px;
+  color: var(--muted);
+}
+
+.scroller {
+  position: relative;
+  height: calc(100vh - 150px);
+  overflow: auto;
+  padding: 0 16px 24px;
+}
+
+.spacer { width: 100%; }
+
+.grid {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #2a313c;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.composite {
+  position: relative;
+  aspect-ratio: 1;
+  background: #000;
+}
+
+.composite img.jpeg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.composite .tint {
+  position: absolute;
+  inset: 0;
+  background: #e11d48;
+  opacity: 0.25;
+  pointer-events: none;
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+.meta {
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.meta a { color: var(--accent); }
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button.icon {
+  border: 0;
+  background: #232833;
+  color: var(--ink);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+button.trash { color: var(--danger); }
+button.plus { color: var(--ok); }
+
+body.no-review button.trash,
+body.no-review button.plus {
+  display: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #232833;
+  color: var(--muted);
+  font-size: 11px;
+}

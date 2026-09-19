@@ -22,6 +22,7 @@ Full operational documentation lives in the **Nornir monodoc**:
 - **Cursor worker:** <https://nornir.github.io/docker/cursor_worker.html>
 - **Production appliance deploy:** <https://nornir.github.io/docker/remote_deployment.html>
 - **Co-located dashboard:** <https://nornir.github.io/docker/dashboard.html>
+- **Annotation overlay gallery:** <https://nornir.github.io/docker/annotation_gallery.html>
 - **Windows D:\ layout:** <https://nornir.github.io/docker/windows_cursor_layout.html>
 
 ## Scripts (short)
@@ -34,6 +35,7 @@ Full operational documentation lives in the **Nornir monodoc**:
 | ``Initialize-NornirBuildAppliance.ps1`` | Run | One-shot layout + templates + GHCR pull + co-located dashboard for the build appliance. |
 | ``start-nornir-build.ps1`` | Run | Everyday appliance shell: unique workspace, path-B CIFS from ``Run\nornir-net-mounts``, GPU image pick. |
 | ``start-dashboard.ps1`` | Run | Start/restart Mosquitto + ``nornir-dashboard`` (``compose.dashboard.yaml``). Use ``-Rebuild`` (optional ``-NoCache``) to rebuild the dashboard image from ``nornir-builddashboard`` and recreate the container when deploying local UI/backend changes. |
+| ``start-annotation-gallery.ps1`` | Run | Slim AnnotationCrops gallery (``compose.annotation-gallery.yaml``). No Nornir in the image. Use ``-Rebuild`` after SPA/server edits. Weekly export is ``annotation-gallery/refresh-export.sh`` on ``nornir:prod``, not this container. |
 | ``Test-NornirGpu.ps1`` | Run | Probe ``--gpus all`` and set ``NORNIR_DOCKER_GPU``. |
 | ``run-cursor-dev.ps1`` | Run | ``docker compose … run`` for **cursor-dev** (bind-mounted repo) or **cursor-dev-clone** with ``-Clone``; optional ``-Gpu``. Auto-includes ``compose.net-mounts.override.yaml`` from ``Run\nornir-net-mounts`` (or legacy ``Run\nornir-dev``) when present for in-container CIFS. Requires ``nornir-docker/.env`` or ``NORNIR_TESTDATA_HOST`` (template: ``dev/example.cursor-dev.run.env``). Optional ``NORNIR_REPRO_DATA_HOST`` mounts repro data at ``/data`` with ``INPUT_NORNIR_DATA=/data``. Test output defaults to ``D:/nornir-test-output`` → ``/tmp/nornir-test-output`` (override with ``NORNIR_TESTOUTPUT_HOST``). |
 | ``start-sample.ps1`` | Mixed | Samples: **Build** → ``docker-build.ps1``; **CursorDev** → ``run-cursor-dev.ps1``; **NornirBuild** → compose ``nornir-build``. |

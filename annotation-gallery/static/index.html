@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Annotation overlay gallery</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>Annotation overlay gallery</h1>
+    <p id="who" class="who"></p>
+  </header>
+  <section class="filters" id="filters">
+    <label>Volume
+      <select id="volume"></select>
+    </label>
+    <label>Type
+      <input id="type" type="search" placeholder="type id or name">
+    </label>
+    <label>Label
+      <input id="label" type="search" placeholder="structure">
+    </label>
+    <label>Z
+      <input id="z" type="search" placeholder="section">
+    </label>
+    <label>Radius
+      <input id="radius" type="search" placeholder="min-max">
+    </label>
+    <label>Ignored
+      <select id="ignored">
+        <option value="active">Active</option>
+        <option value="ignored">Ignored</option>
+        <option value="all">All</option>
+      </select>
+    </label>
+    <label>Sort
+      <select id="sort">
+        <option value="z">Z</option>
+        <option value="type_id">Type</option>
+        <option value="structure_label">Label</option>
+        <option value="radius">Radius</option>
+        <option value="location_id">ID</option>
+      </select>
+    </label>
+  </section>
+  <p id="status" class="status"></p>
+  <div id="scroller" class="scroller">
+    <div id="spacer" class="spacer"></div>
+    <div id="grid" class="grid"></div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

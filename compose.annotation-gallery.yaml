@@ -1,0 +1,42 @@
+# Annotation overlay gallery (slim HTTP + SPA). No Nornir in this image.
+#
+# Registry child name = Identity volume name; child target = volume root
+# (e.g. ln -s /storage4/RC2 /gallery-volumes/RC2). Gallery reads
+# {name}/AnnotationCrops/. Identity never stores filesystem paths.
+#
+# Export / Score / weekly refresh run on nornir:prod (or cursor-dev), not here.
+# Do not spawn nornir-build from a gallery HTTP request.
+#
+#   docker compose -f nornir-docker/compose.annotation-gallery.yaml up -d --build
+#   .\nornir-docker\start-annotation-gallery.ps1
+
+name: nornir-annotation-gallery
+
+services:
+  annotation-gallery:
+    build:
+      context: ./annotation-gallery
+      dockerfile: Dockerfile
+    image: nornir-annotation-gallery:latest
+    restart: unless-stopped
+    environment:
+      GALLERY_HOST: "0.0.0.0"
+      GALLERY_PORT: "8090"
+      GALLERY_VOLUME_DIR: /gallery-volumes
+      GALLERY_IDENTITY_MODE: "${GALLERY_IDENTITY_MODE:-stub}"
+      GALLERY_STUB_ROLE: "${GALLERY_STUB_ROLE:-read}"
+      GALLERY_STUB_GRANTS: "${GALLERY_STUB_GRANTS:-}"
+      GALLERY_SESSION_SECRET: "${GALLERY_SESSION_SECRET:-dev-only-not-secret}"
+      GALLERY_VIKING_URL: "${GALLERY_VIKING_URL:-https://connectomes.utah.edu/connectome/{volume}#locationID={id}}"
+      GALLERY_OIDC_AUTHORITY: "${GALLERY_OIDC_AUTHORITY:-https://identity.codepharm.net:5001}"
+      GALLERY_IDENTITY_API: "${GALLERY_IDENTITY_API:-https://identity.codepharm.net:6001}"
+      GALLERY_OIDC_CLIENT_ID: "${GALLERY_OIDC_CLIENT_ID:-}"
+      GALLERY_OIDC_CLIENT_SECRET: "${GALLERY_OIDC_CLIENT_SECRET:-}"
+      GALLERY_OIDC_REDIRECT_URI: "${GALLERY_OIDC_REDIRECT_URI:-}"
+      GALLERY_READ_PERMISSION: "${GALLERY_READ_PERMISSION:-Read}"
+      GALLERY_REVIEW_PERMISSION: "${GALLERY_REVIEW_PERMISSION:-Review}"
+    ports:
+      - "${GALLERY_BIND_HOST:-127.0.0.1}:8090:8090"
+    volumes:
+      - ${GALLERY_VOLUME_DIR_HOST}:/gallery-volumes
+      - ${GALLERY_STORAGE_HOST}:/storage4
