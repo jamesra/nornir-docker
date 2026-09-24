@@ -15,5 +15,4 @@ Build-arg overrides (`build.env`, `.build.<id>.env`) are read from the directory
 - **Cursor worker:** https://nornir.github.io/docker/cursor_worker.html
 - **Production appliance:** https://nornir.github.io/docker/remote_deployment.html
 - **Dashboard:** https://nornir.github.io/docker/dashboard.html
-- **Annotation gallery:** https://nornir.github.io/docker/annotation_gallery.html
 - **Windows D:\\ layout:** https://nornir.github.io/docker/windows_cursor_layout.html
