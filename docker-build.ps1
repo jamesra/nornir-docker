@@ -3,6 +3,9 @@
   Build Nornir Docker images (dev, dev-cursor-base, cursor-worker, prod, cupy) from the monorepo root.
 
 .DESCRIPTION
+  With no -Images or -Tags, builds every catalogue image. Docker layer cache
+  skips unchanged layers. -NoCache disables that cache.
+
   Sets OCI-related build-args from VERSION, git, and release/package-versions.yaml.
   Uses Push-Location to the repo root for docker context; on exit, error, or Ctrl+C,
   Pop-Location restores your invocation directory.
@@ -14,19 +17,62 @@
   Precedence (highest wins): build.env < .build.<id>.env < script -ExtraArgs < fixed OCI/BOM args appended by this script.
   Committed nornir-docker/example.*.build.env files are templates only; this script does not merge them.
 
+  Catalogue (short name accepted by -Images / -Tags):
+    dev, dev-cursor-base, cursor-worker, prod, cupy
+
+  Not in this catalogue: dashboard, gallery, and sam2-trainer (their own build
+  scripts), eclipse-mosquitto:2 (public), and VikingLegacy images. docker-push.ps1
+  publishes the first three after they are built.
+
 .PARAMETER Images
-  Short names or tags to build (default: all). Accepts cupy, nornir:cupy, nornir-cupy, etc.
-  Catalogue order is always used. Selecting cursor-worker also builds dev-cursor-base first.
+  Catalogue names or local tags to build. Default: the whole catalogue.
+  Examples: cupy, nornir:dev, nornir-prod. Catalogue order is always used.
+  Selecting cursor-worker also builds dev-cursor-base first.
+
+.PARAMETER Tags
+  Same as -Images. Matches docker-push.ps1 so `-Tags prod,cupy` selects the
+  same images on build and push.
+
+.PARAMETER List
+  Print each catalogue image as present or missing. Do not build.
+
+.PARAMETER Help
+  Show this help and exit. `-?` does the same.
+
+.PARAMETER DryRun
+  Print docker build and version-tag commands without running them.
 
 .PARAMETER NoCache
-  Pass --no-cache to each docker build.
+  Pass --no-cache to each docker build. Build-only; docker-push.ps1 has no
+  cache flag.
+
+.EXAMPLE
+  .\nornir-docker\docker-build.ps1 -Help
+
+.EXAMPLE
+  .\nornir-docker\docker-build.ps1 -List
+
+.EXAMPLE
+  .\nornir-docker\docker-build.ps1 -Images prod,cupy -NoCache
+
+.EXAMPLE
+  .\nornir-docker\docker-build.ps1 -Tags cursor-worker -DryRun
 #>
 param(
-    [string[]]$Images = @('dev', 'dev-cursor-base', 'cursor-worker', 'prod', 'cupy'),
+    [string[]]$Images,
+    [string[]]$Tags,
+    [switch]$List,
+    [switch]$Help,
+    [switch]$DryRun,
     [switch]$NoCache
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($Help) {
+    Get-Help -Name $PSCommandPath -Full
+    return
+}
 
 . (Join-Path $PSScriptRoot 'NornirDockerBuild.ps1')
 
@@ -52,7 +98,7 @@ function Resolve-NornirBuildImageSet {
         if ([string]::IsNullOrWhiteSpace($raw)) { continue }
         $id = Normalize-NornirImageId $raw
         if ($allowed -notcontains $id) {
-            Write-Error ("Unknown image '$raw' (normalized '$id'). Allowed: " + ($allowed -join ', '))
+            Write-Error ("Unknown image '$raw' (normalized '$id'). Run .\nornir-docker\docker-build.ps1 -List")
         }
         [void]$selected.Add($id)
     }
@@ -73,7 +119,38 @@ function Resolve-NornirBuildImageSet {
 
 # Invocation directory (e.g. D:\Docker\Builds\nornir) — NOT the script install path.
 $BuildEnvRoot = (Get-Location).ProviderPath
-$selectedImages = Resolve-NornirBuildImageSet -Requested $Images
+$requested = @()
+if ($Images) { $requested += $Images }
+if ($Tags) { $requested += $Tags }
+$requested = @($requested | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+if ($requested.Count -eq 0) {
+    $requested = $Script:NornirCatalogueOrder
+}
+$selectedImages = Resolve-NornirBuildImageSet -Requested $requested
+
+if ($List) {
+    Write-Host ("{0,-28} {1,-10} {2}" -f 'Local', 'State', 'Action')
+    foreach ($id in $selectedImages) {
+        $tag = "nornir:$id"
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $null = & docker image inspect $tag --format '{{.Id}}' 2>$null
+            $present = ($LASTEXITCODE -eq 0)
+        }
+        finally {
+            $ErrorActionPreference = $previous
+        }
+        $state = if ($present) { 'present' } else { 'missing' }
+        Write-Host ("{0,-28} {1,-10} {2}" -f $tag, $state, 'build')
+    }
+    Write-Host ''
+    Write-Host 'present = local tag exists. missing = not built locally. A build still runs docker and reuses the layer cache unless -NoCache.'
+    Write-Host 'Selecting cursor-worker also selects dev-cursor-base. -DryRun prints the docker commands and does not build.'
+    Write-Host 'Not in this catalogue: dashboard, gallery, sam2-trainer (own build scripts), eclipse-mosquitto:2, and VikingLegacy images.'
+    return
+}
+
 Write-Host ("Building docker images; build-arg env from invocation directory: " + (Get-Location).ProviderPath)
 Write-Host ("Selected: " + (($selectedImages | ForEach-Object { "nornir:$_" }) -join ', '))
 
@@ -209,6 +286,10 @@ try {
             }
             $cursorWorkerArgs += '.'
             Write-Host "docker $($cursorWorkerArgs -join ' ')"
+            if ($DryRun) {
+                Write-Host "docker tag nornir:cursor-worker nornir:cursor-worker-$NornirRelease"
+                continue
+            }
             $exitCode = Invoke-NornirDockerCli -ArgumentList $cursorWorkerArgs
             if ($exitCode -eq 0) {
                 $summaryOk = Write-NornirImageBuildSummary -Tag 'nornir:cursor-worker' -Version $NornirRelease
@@ -231,6 +312,7 @@ try {
             -Description $spec.Description `
             -ExtraArgs $spec.ExtraArgs `
             -NoCache:$NoCache `
+            -DryRun:$DryRun `
             -VersionTag $NornirRelease `
             -OciArgs ($ociArgs + @{
                 NORNIR_IMAGE_VARIANT = $spec.ImageVariant

@@ -132,6 +132,7 @@ function Invoke-NornirDockerBuild {
         [hashtable]$ExtraArgs = @{},
         [hashtable]$OciArgs = @{},
         [switch]$NoCache,
+        [switch]$DryRun,
         [string]$VersionTag = ''
     )
     $merged = Get-NornirMergedBuildArgs -BuildEnvRoot $BuildEnvRoot -Tag $Tag -ExtraArgs $ExtraArgs
@@ -153,6 +154,13 @@ function Invoke-NornirDockerBuild {
     }
     $dockerBuildArgs += '.'
     Write-Host "docker $($dockerBuildArgs -join ' ')"
+    if ($DryRun) {
+        if (-not [string]::IsNullOrWhiteSpace($VersionTag)) {
+            $suffix = $Tag.Split(':')[-1]
+            Write-Host "docker tag $Tag nornir:${suffix}-$VersionTag"
+        }
+        return 0
+    }
     $buildExit = Invoke-NornirDockerCli -ArgumentList $dockerBuildArgs
     if ($buildExit -ne 0) { return $buildExit }
 
