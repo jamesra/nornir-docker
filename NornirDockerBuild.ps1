@@ -88,9 +88,14 @@ function Write-NornirImageBuildSummary {
         return $false
     }
     $created = (& docker image inspect $Tag --format '{{.Created}}').Trim()
-    $rev = (& docker image inspect $Tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}').Trim()
-    $built = (& docker image inspect $Tag --format '{{index .Config.Labels "org.opencontainers.image.created"}}').Trim()
-    $verLabel = (& docker image inspect $Tag --format '{{index .Config.Labels "org.opencontainers.image.version"}}').Trim()
+    # Read labels as JSON: embedded double quotes in a --format template are stripped by PowerShell's
+    # native-argument passing ("function org not defined").
+    # Regex over the raw JSON (not ConvertFrom-Json) so the ISO created date stays a string.
+    $labelsJson = [string](& docker image inspect $Tag --format '{{json .Config.Labels}}')
+    $getLabel = { param($n) if ($labelsJson -match ('"' + [regex]::Escape($n) + '":"([^"]*)"')) { $Matches[1] } else { '' } }
+    $rev = & $getLabel 'org.opencontainers.image.revision'
+    $built = & $getLabel 'org.opencontainers.image.created'
+    $verLabel = & $getLabel 'org.opencontainers.image.version'
     Write-Host "  Id:      $id"
     Write-Host "  Created: $created"
     Write-Host "  Labels:  version=$verLabel revision=$rev created=$built"

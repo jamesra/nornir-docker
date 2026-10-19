@@ -292,8 +292,11 @@ function Get-ImagePushPlan {
     $id = (& docker image inspect $Item.Local --format '{{.Id}}').Trim()
     $plan.LocalId = $id
     $plan.Created = (& docker image inspect $Item.Local --format '{{.Created}}').Trim()
-    $plan.Revision = (& docker image inspect $Item.Local --format '{{index .Config.Labels "org.opencontainers.image.revision"}}').Trim()
-    $plan.Built = (& docker image inspect $Item.Local --format '{{index .Config.Labels "org.opencontainers.image.created"}}').Trim()
+    # JSON labels: embedded double quotes in a --format template are stripped by PowerShell native-arg passing.
+    $labelsJson = [string](& docker image inspect $Item.Local --format '{{json .Config.Labels}}')
+    $getLabel = { param($n) if ($labelsJson -match ('"' + [regex]::Escape($n) + '":"([^"]*)"')) { $Matches[1] } else { '' } }
+    $plan.Revision = & $getLabel 'org.opencontainers.image.revision'
+    $plan.Built = & $getLabel 'org.opencontainers.image.created'
 
     $floatingRef = "$($Item.RemoteRepo):$($Item.Floating)"
     $versionRef = "$($Item.RemoteRepo):$($Item.VersionTag)"
