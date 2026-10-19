@@ -136,6 +136,11 @@ RUN chmod +x /tmp/install-monorepo-editables.sh \
 RUN pip install --no-cache-dir pytest \
       "fastapi >= 0.110" "uvicorn[standard] >= 0.29" "httpx >= 0.27"
 
+# Claude Code CLI (native installer -> /root/.local/bin/claude). Config/login live in CLAUDE_CONFIG_DIR
+# (/root/.claude), which compose.cursor-dev.yaml backs with a named volume so login survives rebuilds.
+RUN curl -fsSL https://claude.ai/install.sh | bash     && /root/.local/bin/claude --version
+ENV PATH="/root/.local/bin:$PATH"     CLAUDE_CONFIG_DIR=/root/.claude
+
 COPY nornir-docker/cursor-dev-entry.sh /usr/local/bin/cursor-dev-entry.sh
 COPY nornir-docker/submodule-sync.sh /usr/local/lib/nornir-docker/submodule-sync.sh
 COPY nornir-docker/install-monorepo-editables.sh /usr/local/bin/install-monorepo-editables.sh

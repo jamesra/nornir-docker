@@ -71,6 +71,7 @@ services:
       NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
       NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
       NORNIR_WORKSPACE_STRATEGY: mounted
+      CLAUDE_CONFIG_DIR: /root/.claude
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
       NORNIR_IMPORT_CACHE_PATH: ${NORNIR_IMPORT_CACHE_PATH:-/tmp/nornir-test-output/ImportCache}
@@ -86,6 +87,9 @@ services:
       - type: bind
         source: ${NORNIR_WORKSPACE_HOST:-..}
         target: /workspace
+      - type: volume
+        source: claude-config
+        target: /root/.claude
       - type: bind
         source: ${NORNIR_TESTDATA_HOST}
         target: /nornir-testdata
@@ -134,6 +138,7 @@ services:
       NORNIR_CLONE_URL: ${NORNIR_CLONE_URL:-https://github.com/jamesra/nornir.git}
       NORNIR_CLONE_BRANCH: ${NORNIR_CLONE_BRANCH:-dev}
       NORNIR_WORKSPACE_STRATEGY: clone
+      CLAUDE_CONFIG_DIR: /root/.claude
       NORNIR_CLONE_DEPTH: "0"
       TESTINPUTPATH: /nornir-testdata
       TESTOUTPUTPATH: /tmp/nornir-test-output
@@ -148,6 +153,9 @@ services:
       - type: volume
         source: cursor-dev-work
         target: /workspace
+      - type: volume
+        source: claude-config
+        target: /root/.claude
       - type: bind
         source: ${NORNIR_TESTDATA_HOST}
         target: /nornir-testdata
@@ -186,3 +194,4 @@ services:
 
 volumes:
   cursor-dev-work:
+  claude-config:
