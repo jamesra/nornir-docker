@@ -3,8 +3,18 @@
   Build Nornir Docker images (dev, dev-cursor-base, cursor-worker, prod, cupy) from the monorepo root.
 
 .DESCRIPTION
-  With no -Images or -Tags, builds every catalogue image. Docker layer cache
-  skips unchanged layers. -NoCache disables that cache.
+  With no -Images or -Tags, builds every catalogue image. Images whose inputs have not changed are
+  skipped entirely (see "Skipping unchanged images"); Docker layer cache skips unchanged layers of
+  the rest. -NoCache disables that cache and also forces a build.
+
+  Skipping unchanged images:
+    Each successful build is recorded in .docker-build-state.json in the invocation directory (next to
+    build.env): per image, the HEAD and uncommitted-changes hash of every COPY'd source directory,
+    hashes of the Dockerfile and COPY'd files, a hash of the build-args (minus BUILD_DATE and
+    SOURCE_REVISION), the image ID, and (cursor-worker) the dev-cursor-base image ID. An image is
+    skipped when the tag still exists with that image ID and nothing recorded has changed. Compose-file
+    hashes are recorded and reported ("compose file changed (no rebuild needed)") but never trigger a
+    build. Delete the JSON or pass -Force to rebuild everything.
 
   Sets OCI-related build-args from VERSION, git, and release/package-versions.yaml.
   Uses Push-Location to the repo root for docker context; on exit, error, or Ctrl+C,
@@ -43,8 +53,11 @@
   Print docker build and version-tag commands without running them.
 
 .PARAMETER NoCache
-  Pass --no-cache to each docker build. Build-only; docker-push.ps1 has no
+  Pass --no-cache to each docker build (implies -Force). Build-only; docker-push.ps1 has no
   cache flag.
+
+.PARAMETER Force
+  Build every selected image even if its recorded inputs are unchanged (keeps the Docker layer cache).
 
 .EXAMPLE
   .\nornir-docker\docker-build.ps1 -Help
@@ -64,7 +77,8 @@ param(
     [switch]$List,
     [switch]$Help,
     [switch]$DryRun,
-    [switch]$NoCache
+    [switch]$NoCache,
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,7 +143,8 @@ if ($requested.Count -eq 0) {
 $selectedImages = Resolve-NornirBuildImageSet -Requested $requested
 
 if ($List) {
-    Write-Host ("{0,-28} {1,-10} {2}" -f 'Local', 'State', 'Action')
+    Write-Host ("{0,-28} {1,-10} {2}" -f 'Local', 'State', 'Last recorded build (UTC)')
+    $listState = Read-NornirBuildState -BuildEnvRoot $BuildEnvRoot
     foreach ($id in $selectedImages) {
         $tag = "nornir:$id"
         $previous = $ErrorActionPreference
@@ -142,10 +157,11 @@ if ($List) {
             $ErrorActionPreference = $previous
         }
         $state = if ($present) { 'present' } else { 'missing' }
-        Write-Host ("{0,-28} {1,-10} {2}" -f $tag, $state, 'build')
+        $recorded = if ($listState.ContainsKey($tag)) { [string]$listState[$tag]['builtAt'] } else { '-' }
+        Write-Host ("{0,-28} {1,-10} {2}" -f $tag, $state, $recorded)
     }
     Write-Host ''
-    Write-Host 'present = local tag exists. missing = not built locally. A build still runs docker and reuses the layer cache unless -NoCache.'
+    Write-Host 'present = local tag exists. missing = not built locally. Last recorded build comes from .docker-build-state.json; a run skips an image whose recorded inputs are unchanged (-Force to override).'
     Write-Host 'Selecting cursor-worker also selects dev-cursor-base. -DryRun prints the docker commands and does not build.'
     Write-Host 'Not in this catalogue: dashboard, gallery, sam2-trainer (own build scripts), eclipse-mosquitto:2, and VikingLegacy images.'
     return
@@ -273,6 +289,13 @@ try {
         Write-Host $spec.Banner
         if ($spec.Kind -eq 'cursor-worker') {
             $cursorMerged = Get-NornirMergedBuildArgs -BuildEnvRoot $BuildEnvRoot -Tag 'nornir:cursor-worker' -ExtraArgs @{ BASE_IMAGE = 'nornir:dev-cursor-base' }
+            $cwDecision = Resolve-NornirBuildDecision -RepoRoot $RepoRoot -BuildEnvRoot $BuildEnvRoot `
+                -Dockerfile 'nornir-docker/Dockerfile.cursor-worker' -Tag 'nornir:cursor-worker' `
+                -BuildArgs $cursorMerged -BaseImage 'nornir:dev-cursor-base' -Force:($Force -or $NoCache)
+            if (-not $cwDecision.Needed) {
+                if (-not $DryRun) { Set-NornirVersionTag -Tag 'nornir:cursor-worker' -Version $NornirRelease }
+                continue
+            }
             $cursorWorkerArgs = @(
                 'build',
                 '-f', 'nornir-docker/Dockerfile.cursor-worker',
@@ -297,6 +320,9 @@ try {
                     Write-Warning '  Post-build verification reported problems for nornir:cursor-worker'
                     $exitCode = 2
                 }
+                else {
+                    Save-NornirBuildState -BuildEnvRoot $BuildEnvRoot -Tag 'nornir:cursor-worker' -Fingerprint $cwDecision.Fingerprint
+                }
             }
             continue
         }
@@ -312,6 +338,7 @@ try {
             -Description $spec.Description `
             -ExtraArgs $spec.ExtraArgs `
             -NoCache:$NoCache `
+            -Force:$Force `
             -DryRun:$DryRun `
             -VersionTag $NornirRelease `
             -OciArgs ($ociArgs + @{

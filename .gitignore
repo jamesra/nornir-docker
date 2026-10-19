@@ -12,3 +12,7 @@ build.env
 !**/example*.build.env
 *.run.env
 !**/example*.run.env
+
+# docker-build.ps1 skip-unchanged state (per invocation directory)
+.docker-build-state.json
+.docker-build-state.json.tmp
