@@ -3,7 +3,7 @@
   Everyday launcher for the remote Nornir build appliance (interactive shell + path-B CIFS).
 
 .DESCRIPTION
-  Creates a unique workspace under mounted-configs\nornir-build-<version>-<stamp>, enables
+  Creates a unique workspace under <ROOT>/Work/nornir-build-<version>-<stamp>, enables
   in-container CIFS/NFS from shared Run\nornir-net-mounts (CAP_SYS_ADMIN), picks nornir:cupy
   vs nornir:prod via GPU probe when -Image is omitted, and starts an interactive container.
   This is not the programmer Dev Container (run-cursor-dev) or the AI worker (start-cursor-worker).
@@ -27,7 +27,7 @@
   Monorepo root for scripts and default clone URL. Default: parent of nornir-docker.
 
 .PARAMETER DockerUserRoot
-  Machine-local Docker root. Default: NORNIR_DOCKER_USER_ROOT or C:\Docker.
+  Machine-local Docker root. Default: NORNIR_DOCKER_USER_ROOT, else D:\Docker (Windows) or /srv/docker (Linux).
 
 .PARAMETER Gpu
   Force --gpus all.
@@ -42,7 +42,7 @@
   Fail if Run\nornir-net-mounts layout is missing (default: true when layout root exists).
 
 .PARAMETER WorkspaceParent
-  Parent for unique session folders. Default: <ROOT>\mounted-configs.
+  Parent for unique session folders. Default: <ROOT>/Work (`stack.ps1 prune` removes old ones).
 
 .PARAMETER Detach
   docker run -d instead of interactive.
@@ -116,7 +116,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 $versionSafe = Sanitize-NornirVersionLabel -Raw $Version
 $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')
 if ([string]::IsNullOrWhiteSpace($WorkspaceParent)) {
-    $WorkspaceParent = Join-Path $DockerUserRoot 'mounted-configs'
+    $WorkspaceParent = Join-Path $DockerUserRoot 'Work'
 }
 $sessionName = "nornir-build-${versionSafe}-${stamp}"
 $sessionDir = Join-Path $WorkspaceParent $sessionName
@@ -191,14 +191,14 @@ foreach ($p in $envPaths) {
 }
 
 $netMountsRoot = Get-NornirNetMountsRunRoot -DockerUserRoot $DockerUserRoot
-$tsvPath = Join-Path $netMountsRoot 'net-mounts\nas-mounts.tsv'
+$tsvPath = Join-Path (Join-Path $netMountsRoot 'net-mounts') 'nas-mounts.tsv'
 $requireMounts = $RequireNetMounts -or (-not $SkipNetMounts)
 if (-not $SkipNetMounts) {
     if (-not (Test-Path -LiteralPath $tsvPath)) {
         if ($requireMounts) {
             Write-Error @"
 Missing shared CIFS layout: $tsvPath
-Run Initialize-NornirBuildAppliance.ps1 -MonorepoRoot <repo>, then edit nas-mounts.tsv and secrets\net-creds\*.cred.
+Run nornir-docker/deploy/Initialize-DockerHost.ps1 -Role compute, then edit nas-mounts.tsv and secrets/net-creds/*.cred.
 Or pass -SkipNetMounts (not recommended for the production appliance).
 "@
         }
@@ -226,9 +226,42 @@ Add-NornirDockerGpuArgs -RunArgs $runArgs -Gpu:$useGpu -ForceGpuFlagOnly
 Add-NornirDockerUlimitArgs -RunArgs $runArgs
 Add-NornirDockerExtraRunArgs -RunArgs $runArgs
 
-# MQTT: co-located dashboard via host.docker.internal
+# Shared memory: multiprocessing pools fail with Docker's 64 MB default.
+$shmSize = if ($env:NORNIR_DOCKER_SHM_SIZE) { $env:NORNIR_DOCKER_SHM_SIZE } else { '64g' }
+[void]$runArgs.Add("--shm-size=$shmSize")
+
+# Remote debugging: publish debugpy on loopback only (reach it with `stack.ps1 tunnel`).
+# Inside: python -m pip install debugpy; python -m debugpy --listen 0.0.0.0:5678 --wait-for-client -m <module> ...
+if ($env:NORNIR_DEBUGPY -eq '1') {
+    $dbgPort = if ($env:NORNIR_DEBUGPY_PORT) { $env:NORNIR_DEBUGPY_PORT } else { '5678' }
+    [void]$runArgs.Add('-p')
+    [void]$runArgs.Add("127.0.0.1:${dbgPort}:${dbgPort}")
+    [void]$runArgs.Add('-e')
+    [void]$runArgs.Add("NORNIR_DEBUGPY_PORT=$dbgPort")
+    Write-Host "  debugpy: 127.0.0.1:$dbgPort published (start your command under python -m debugpy --listen 0.0.0.0:$dbgPort)"
+}
+
+# Persistent logs (unified logging convention: NORNIR_LOG_ROOT).
+$logsDir = Join-Path (Join-Path $DockerUserRoot 'Logs') 'nornir-build'
+$null = New-Item -ItemType Directory -Force -Path $logsDir
+[void]$runArgs.Add('-v')
+[void]$runArgs.Add("${logsDir}:/var/log/nornir")
+[void]$runArgs.Add('-e')
+[void]$runArgs.Add('NORNIR_LOG_ROOT=/var/log/nornir')
+
+# MQTT: join the co-located dashboard network when it exists. This works on Linux, where the
+# broker binds 127.0.0.1 and is unreachable via host-gateway. Otherwise use host.docker.internal.
+$mqttNetwork = if ($env:NORNIR_MQTT_NETWORK) { $env:NORNIR_MQTT_NETWORK } else { 'nornir-dashboard_default' }
 if (-not $env:NORNIR_MQTT_HOST) {
-    $env:NORNIR_MQTT_HOST = 'host.docker.internal'
+    & docker network inspect $mqttNetwork 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $env:NORNIR_MQTT_HOST = 'mosquitto'
+        [void]$runArgs.Add('--network')
+        [void]$runArgs.Add($mqttNetwork)
+    }
+    else {
+        $env:NORNIR_MQTT_HOST = 'host.docker.internal'
+    }
 }
 if (-not $env:NORNIR_MQTT_PORT) {
     $env:NORNIR_MQTT_PORT = '1883'

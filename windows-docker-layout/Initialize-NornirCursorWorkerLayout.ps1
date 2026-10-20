@@ -120,7 +120,6 @@ Write-Host ""
 
 if (-not $SkipEnvCopy) {
     Write-Host "Build env templates -> $buildSharedRoot"
-    Copy-TemplateIfMissing -Source (Join-Path $dockerDir "example._shared.build.env") -Destination (Join-Path $buildSharedRoot "build.env")
     Copy-TemplateIfMissing -Source (Join-Path $dockerDir "dev\example.nornir-dev-cursor-base.build.env") -Destination (Join-Path $buildSharedRoot ".build.nornir-dev-cursor-base.env")
     Copy-TemplateIfMissing -Source (Join-Path $dockerDir "example.nornir-cursor-worker.build.env") -Destination (Join-Path $buildSharedRoot ".build.nornir-cursor-worker.env")
     Write-Host ""
@@ -160,7 +159,7 @@ if ($WarnIfDevParityMissing -and (Test-Path -LiteralPath $workerRunEnv)) {
     $parityLine = Select-String -LiteralPath $workerRunEnv -Pattern '^\s*NORNIR_WORKER_DEV_PARITY_MOUNTS\s*=\s*1\s*$' -Quiet
     $devRunDir = Join-Path $DockerUserRoot "Run\nornir-dev"
     if ($parityLine -and -not (Test-Path -LiteralPath $devRunDir)) {
-        Write-Warning "NORNIR_WORKER_DEV_PARITY_MOUNTS=1 is set but $devRunDir is missing. Configure dev volumes per nornir-docker/windows-docker-layout/NORNIR_DEV_VOLUMES.md"
+        Write-Warning "NORNIR_WORKER_DEV_PARITY_MOUNTS=1 is set but $devRunDir is missing. Configure dev volumes per https://nornir.github.io/deployment/nornir_dev_and_worker.html"
     }
 }
 

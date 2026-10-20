@@ -196,12 +196,12 @@ try {
     $BuildDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     $ImageSource = 'https://github.com/jamesra/nornir'
 
-    $bomScript = Join-Path $RepoRoot 'release\docker_package_versions_json.py'
-    $yamlPath = Join-Path $RepoRoot 'release\package-versions.yaml'
+    $bomScript = Join-Path (Join-Path $RepoRoot 'release') 'docker_package_versions_json.py'
+    $yamlPath = Join-Path (Join-Path $RepoRoot 'release') 'package-versions.yaml'
     if (-not (Test-Path $bomScript)) {
         Write-Error "Missing $bomScript"
     }
-    $venvPy = Join-Path $RepoRoot 'venv\pyre314\Scripts\python.exe'
+    $venvPy = Join-Path (Join-Path (Join-Path (Join-Path $RepoRoot 'venv') 'pyre314') 'Scripts') 'python.exe'
     $pythonExe = if (Test-Path $venvPy) { $venvPy } else { 'python' }
     $PackageVersionsB64 = & $pythonExe $bomScript --base64 $yamlPath
     if ($LASTEXITCODE -ne 0) {

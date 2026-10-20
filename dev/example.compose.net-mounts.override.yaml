@@ -8,7 +8,7 @@
 # compose/Dockerfile edit. After mounts succeed, cursor-dev-entry.sh drops CAP_SYS_ADMIN when
 # setpriv/capsh are available.
 #
-# Prerequisites (see nornir-docker/windows-docker-layout/NORNIR_DEV_VOLUMES.md):
+# Prerequisites (see https://nornir.github.io/deployment/nornir_build_appliance.html):
 #   - cifs / nfsv4 kernel drivers loaded on the WSL2 host (shared kernel).
 #   - NORNIR_NET_MOUNTS_DIR_HOST  -> dir containing nas-mounts.tsv
 #   - NORNIR_NET_CREDS_DIR_HOST   -> dir containing per-share *.cred files

@@ -21,7 +21,7 @@
 #
 # NAS shares: use in-container CIFS (path B). Copy compose.net-mounts.override.yaml under
 # $NORNIR_DOCKER_USER_ROOT/Run/nornir-net-mounts (or Run/nornir-dev) and set
-# NORNIR_NET_MOUNTS_DIR_HOST / NORNIR_NET_CREDS_DIR_HOST. See windows-docker-layout/NORNIR_DEV_VOLUMES.md.
+# NORNIR_NET_MOUNTS_DIR_HOST / NORNIR_NET_CREDS_DIR_HOST. See https://nornir.github.io/deployment/nornir_build_appliance.html (CIFS shares).
 #
 # On start, cursor-dev-entry.sh runs install-monorepo-editables.sh (pip install -e --no-deps from /workspace).
 #
@@ -50,6 +50,11 @@ x-cursor-dev-app: &cursor-dev-app
       INSTALL_MONOREPO_EDITABLES: "0"
       NORNIR_HEADLESS: 1
   image: nornir:dev-cursor-base
+  # Pass the documented run settings (NORNIR_SYNC_REMOTE, NORNIR_SUBMODULE_UPDATE, GITHUB_TOKEN,
+  # NORNIR_TILE_*, NORNIR_GPU_PYRAMID_BATCH_MB, ...) into the container; `environment:` below wins.
+  env_file:
+    - path: .env
+      required: false
   working_dir: /workspace
   stdin_open: true
   tty: true

@@ -72,7 +72,12 @@ if (-not $Down) {
 # Keep volumes/networks stable regardless of invocation directory.
 $ComposeProject = 'nornir-dashboard'
 
-$runEnv = Join-Path $DockerUserRoot 'Run\nornir-dashboard\dashboard.run.env'
+$runDir = Join-Path (Join-Path $DockerUserRoot 'Run') 'nornir-dashboard'
+# Canonical <stack>.run.env name; dashboard.run.env is the legacy name.
+$runEnv = Join-Path $runDir 'nornir-dashboard.run.env'
+if (-not (Test-Path -LiteralPath $runEnv)) {
+    $runEnv = Join-Path $runDir 'dashboard.run.env'
+}
 if (Test-Path -LiteralPath $runEnv) {
     Import-NornirDotEnvFile -Path $runEnv
     Write-Host "Loaded env: $runEnv"
@@ -262,7 +267,7 @@ finally {
 
 if (-not $Down) {
     Write-Host 'Dashboard: http://127.0.0.1:8087'
-    Write-Host 'MQTT (host bind): see NORNIR_MQTT_BIND_HOST (default 0.0.0.0:1883 in compose; prefer 127.0.0.1 in dashboard.run.env)'
+    Write-Host 'MQTT (host bind): see NORNIR_MQTT_BIND_HOST (default 127.0.0.1; widen only with a firewall rule)'
     if ($Rebuild) {
         Write-Host 'Hard-refresh the browser after -Rebuild. Live progress during the brief downtime is not replayed; retained run meta + SQLite history should reappear.'
     }

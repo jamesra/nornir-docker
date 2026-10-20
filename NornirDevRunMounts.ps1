@@ -7,7 +7,7 @@
 function Get-NornirDockerUserRoot {
     <#
     .SYNOPSIS
-      Resolve NORNIR_DOCKER_USER_ROOT (default C:\Docker when unset).
+      Resolve NORNIR_DOCKER_USER_ROOT (default D:\Docker on Windows, /srv/docker elsewhere).
     #>
     param([string]$DockerUserRoot = '')
     if (-not [string]::IsNullOrWhiteSpace($DockerUserRoot)) {
@@ -16,7 +16,10 @@ function Get-NornirDockerUserRoot {
     if ($env:NORNIR_DOCKER_USER_ROOT -and $env:NORNIR_DOCKER_USER_ROOT.Trim()) {
         return $env:NORNIR_DOCKER_USER_ROOT.Trim()
     }
-    return 'C:\Docker'
+    if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+        return 'D:\Docker'
+    }
+    return '/srv/docker'
 }
 
 function Get-NornirNetMountsRunRoot {
@@ -26,7 +29,7 @@ function Get-NornirNetMountsRunRoot {
     #>
     param([string]$DockerUserRoot = '')
     $root = Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot
-    return (Join-Path $root 'Run\nornir-net-mounts')
+    return (Join-Path (Join-Path $root 'Run') 'nornir-net-mounts')
 }
 
 function Get-NornirDevRunEnvFilePaths {
@@ -39,9 +42,9 @@ function Get-NornirDevRunEnvFilePaths {
         [string]$DockerUserRoot = ''
     )
     $DockerUserRoot = Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot
-    $netMountsEnv = Join-Path $DockerUserRoot 'Run\nornir-net-mounts\.run.nornir-net-mounts.env'
-    $legacyDevEnv = Join-Path $DockerUserRoot 'Run\nornir-dev\.run.nornir-dev.env'
-    $fallback = Join-Path $ScriptsRepoRoot 'nornir-docker\.env'
+    $netMountsEnv = Join-Path (Join-Path (Join-Path $DockerUserRoot 'Run') 'nornir-net-mounts') '.run.nornir-net-mounts.env'
+    $legacyDevEnv = Join-Path (Join-Path (Join-Path $DockerUserRoot 'Run') 'nornir-dev') '.run.nornir-dev.env'
+    $fallback = Join-Path (Join-Path $ScriptsRepoRoot 'nornir-docker') '.env'
     return @($netMountsEnv, $legacyDevEnv, $fallback)
 }
 
@@ -65,7 +68,7 @@ function Get-NornirNetMountsHostPaths {
     }
     $runRoot = Get-NornirNetMountsRunRoot -DockerUserRoot $DockerUserRoot
     $defaultMounts = Join-Path $runRoot 'net-mounts'
-    $defaultCreds = Join-Path $runRoot 'secrets\net-creds'
+    $defaultCreds = Join-Path (Join-Path $runRoot 'secrets') 'net-creds'
     if ((Test-Path -LiteralPath $defaultMounts) -and (Test-Path -LiteralPath $defaultCreds)) {
         return @{
             MountsDir = $defaultMounts
@@ -74,9 +77,9 @@ function Get-NornirNetMountsHostPaths {
         }
     }
     # Legacy layout under Run\nornir-dev
-    $legacyRoot = Join-Path (Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot) 'Run\nornir-dev'
+    $legacyRoot = Join-Path (Join-Path (Get-NornirDockerUserRoot -DockerUserRoot $DockerUserRoot) 'Run') 'nornir-dev'
     $legacyMounts = Join-Path $legacyRoot 'net-mounts'
-    $legacyCreds = Join-Path $legacyRoot 'secrets\net-creds'
+    $legacyCreds = Join-Path (Join-Path $legacyRoot 'secrets') 'net-creds'
     if ((Test-Path -LiteralPath $legacyMounts) -and (Test-Path -LiteralPath $legacyCreds)) {
         return @{
             MountsDir = $legacyMounts

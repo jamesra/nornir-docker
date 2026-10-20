@@ -54,7 +54,7 @@ function Add-NornirDockerMqttRunArgs {
     param([System.Collections.IList]$RunArgs)
     if (-not $env:NORNIR_MQTT_HOST) { return }
     $mqttPort = if ($env:NORNIR_MQTT_PORT) { $env:NORNIR_MQTT_PORT } else { '1883' }
-    $mqttNetwork = if ($env:NORNIR_MQTT_NETWORK) { $env:NORNIR_MQTT_NETWORK } else { 'nornir-docker_default' }
+    $mqttNetwork = if ($env:NORNIR_MQTT_NETWORK) { $env:NORNIR_MQTT_NETWORK } else { 'nornir-dashboard_default' }
     [void]$RunArgs.Add('-e')
     [void]$RunArgs.Add("NORNIR_MQTT_HOST=$($env:NORNIR_MQTT_HOST)")
     [void]$RunArgs.Add('-e')

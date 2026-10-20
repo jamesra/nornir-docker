@@ -1,2 +1,0 @@
-# Obsolete: the dev image installs from ../constraints-headless.txt (repo root).
-# See nornir-docker/README.md.

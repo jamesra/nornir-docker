@@ -1,2 +1,0 @@
-# Obsolete: production + CuPy uses ../prod/Dockerfile with --build-arg INSTALL_CUPY=1.
-# See nornir-docker/README.md.

@@ -28,7 +28,8 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 param(
     [string]$WorkspaceRunParent = "D:\Docker\mounted-configs\nornir-cursor-worker",
-    [string]$AgentCloneParent = "D:\agents"
+    # start-cursor-worker.ps1 creates nornir-agent-* clones next to the per-run folders.
+    [string]$AgentCloneParent = (Join-Path (Join-Path $(if ($env:NORNIR_DOCKER_USER_ROOT) { $env:NORNIR_DOCKER_USER_ROOT } else { 'D:\Docker' }) 'mounted-configs') 'nornir-cursor-worker')
 )
 
 $ErrorActionPreference = "Continue"
