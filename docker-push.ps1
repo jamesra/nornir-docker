@@ -15,18 +15,24 @@
   Catalogue (short name accepted by -Images):
     dev, dev-cursor-base, cursor-worker, prod, cupy
     dashboard, gallery, sam2-trainer
+    segmentation (opt-in only: never part of the default set)
 
-  Not in this catalogue: eclipse-mosquitto:2 (public), and VikingLegacy images
-  (segmentation-server, grpc-annotation-service, section-correction-service,
-  identity-standalone, identity-webapi, identity-all-services, identity-devtest,
-  certbot renewers). Publish those from VikingLegacy.
+  segmentation pushes viking-segmentation-server:latest, built by the
+  viking-segmentation stack, as ghcr.io/<Owner>/viking-segmentation-server:latest
+  and :<Viking short SHA>. The SHA is read from VIKING_REPO_ROOT_HOST, or from a
+  Viking checkout next to the monorepo, so build from that checkout first.
+
+  Not in this catalogue: eclipse-mosquitto:2 (public), and the other Viking
+  images (grpc-annotation-service, section-correction-service, identity-*,
+  certbot renewers).
 
 .PARAMETER Owner
   GHCR namespace. Default: jamesra (or $env:NORNIR_GHCR_OWNER).
 
 .PARAMETER Images
-  Catalogue names or local tags to push. Default: the whole catalogue.
-  Examples: cupy, nornir:dev, dashboard, gallery, sam2-trainer.
+  Catalogue names or local tags to push. Default: the whole catalogue except
+  segmentation. Examples: cupy, nornir:dev, dashboard, gallery, sam2-trainer,
+  segmentation.
 
 .PARAMETER Tags
   Same as -Images. Kept so existing ` -Tags prod,cupy ` commands still select
@@ -62,6 +68,9 @@
 
 .EXAMPLE
   .\nornir-docker\docker-push.ps1 -Images cupy,gallery
+
+.EXAMPLE
+  .\nornir-docker\docker-push.ps1 -Images segmentation
 #>
 param(
     [string]$Owner = '',
@@ -175,6 +184,22 @@ function Test-RemoteDigestMatchesLocal {
     return $RepoDigests -contains $needle
 }
 
+function Get-VikingShortSha {
+    <# Short HEAD SHA of the Viking checkout (VIKING_REPO_ROOT_HOST, else ../Viking). '' when not found. #>
+    $candidates = @($env:VIKING_REPO_ROOT_HOST, (Join-Path (Split-Path -Parent $RepoRoot) 'Viking')) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    foreach ($root in $candidates) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root 'Servers/SegmentationServer'))) {
+            continue
+        }
+        $sha = & git -C $root rev-parse --short HEAD 2>$null
+        if ($LASTEXITCODE -eq 0 -and $sha) {
+            return $sha.Trim()
+        }
+    }
+    return ''
+}
+
 function Get-PushCatalogue {
     param(
         [Parameter(Mandatory)][string]$OwnerName,
@@ -221,6 +246,12 @@ function Get-PushCatalogue {
             Key = 'sam2-trainer'; Local = 'sam2-trainer:dev'; RemoteRepo = "ghcr.io/$OwnerName/sam2-trainer"; Floating = 'dev'; VersionTag = "dev-$Version"
             Aliases = @('sam2', 'sam2-trainer', 'trainer', 'sam2-trainer:dev')
             Rebuild = 'D:\Docker\Builds\sam2-trainer\build.ps1'
+        },
+        @{
+            Key = 'segmentation'; Local = 'viking-segmentation-server:latest'; RemoteRepo = "ghcr.io/$OwnerName/viking-segmentation-server"; Floating = 'latest'; VersionTag = (Get-VikingShortSha)
+            Aliases = @('segmentation', 'seg', 'viking-segmentation', 'viking-segmentation-server', 'viking-segmentation-server:latest')
+            Rebuild = 'nornir-docker/deploy/stack.ps1 viking-segmentation build'
+            OptIn = $true
         }
     )
 }
@@ -232,7 +263,7 @@ function Resolve-PushSelection {
         [switch]$AddCompanions
     )
     if (-not $Requested -or $Requested.Count -eq 0) {
-        return $Catalogue
+        return @($Catalogue | Where-Object { -not $_.OptIn })
     }
     $selected = [ordered]@{}
     foreach ($name in $Requested) {
@@ -301,7 +332,7 @@ function Get-ImagePushPlan {
     $floatingRef = "$($Item.RemoteRepo):$($Item.Floating)"
     $versionRef = "$($Item.RemoteRepo):$($Item.VersionTag)"
     $floatingRemote = Get-GhcrTagDigest -Reference $floatingRef
-    $versionRemote = Get-GhcrTagDigest -Reference $versionRef
+    $versionRemote = if ($Item.VersionTag) { Get-GhcrTagDigest -Reference $versionRef } else { @{ Status = 'absent'; Digest = '' } }
 
     $plan.FloatingState = $floatingRemote.Status
     $plan.VersionState = $versionRemote.Status
@@ -330,8 +361,13 @@ function Get-ImagePushPlan {
         $plan.VersionState = 'dirty'
     }
 
+    $hasVersion = -not [string]::IsNullOrWhiteSpace($Item.VersionTag)
+    if (-not $hasVersion) {
+        $plan.VersionState = 'n/a'
+    }
+
     $plan.PushFloating = $Force -or ($plan.FloatingState -ne 'clean')
-    $plan.PushVersion = $Force -or ($plan.VersionState -ne 'clean')
+    $plan.PushVersion = $hasVersion -and ($Force -or ($plan.VersionState -ne 'clean'))
     if ($plan.PushFloating -and $plan.PushVersion) {
         $plan.Action = 'push'
     }
@@ -387,7 +423,10 @@ if ($List) {
     }
     Write-Host ''
     Write-Host 'clean = GHCR tag digest is already on this local image. dirty = tag missing or different. missing = not built locally. unknown = registry check failed (a push will be attempted).'
-    Write-Host 'Not listed: eclipse-mosquitto:2 (public), and VikingLegacy images (segmentation-server, grpc-annotation-service, section-correction-service, identity-standalone, identity-webapi, identity-all-services).'
+    if (-not $explicit) {
+        Write-Host 'Opt-in (pass -Images): segmentation (viking-segmentation-server:latest).'
+    }
+    Write-Host 'Not listed: eclipse-mosquitto:2 (public), and the other Viking images (grpc-annotation-service, section-correction-service, identity-*).'
     return
 }
 
@@ -429,6 +468,9 @@ foreach ($plan in $plans) {
         Invoke-NornirDockerCli -DockerCliArgs @('tag', $plan.Local, $remote)
         Invoke-NornirDockerCli -DockerCliArgs @('push', $remote)
         $pushed++
+    }
+    elseif ([string]::IsNullOrWhiteSpace($plan.VersionTag)) {
+        Write-Warning "  No versioned tag for $($plan.Local) (Viking checkout not found; set VIKING_REPO_ROOT_HOST)."
     }
     else {
         Write-Host "  Unchanged. Skipping $($plan.RemoteRepo):$($plan.VersionTag)"

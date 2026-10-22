@@ -294,6 +294,22 @@ function Test-StackHealth {
     }
 }
 
+function Get-RegistryBuildServices {
+    <#
+      Services with a build: section whose image is a registry ref (e.g. SEGMENTATION_IMAGE=ghcr.io/...).
+      `pull --ignore-buildable` skips them, so `pull` names them explicitly. Local-only names stay skipped,
+      so a buildable service is never replaced by an unrelated Docker Hub image. Call with the stack env set.
+    #>
+    param([string[]]$Base)
+    $json = & docker @Base config --format json 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $json) { return @() }
+    $cfg = ($json | Out-String) | ConvertFrom-Json
+    $names = foreach ($p in $cfg.services.PSObject.Properties) {
+        if ($p.Value.build -and "$($p.Value.image)" -match '^([^/]*[.:][^/]*|localhost)/') { $p.Name }
+    }
+    return @($names)
+}
+
 function Invoke-ComposeStack {
     param([hashtable]$Entry, [string]$Act)
     $envMap = Get-StackEnvironment -Entry $Entry -Root $Root
@@ -326,6 +342,10 @@ function Invoke-ComposeStack {
     Push-Location $Entry.RepoRoot
     try {
         Invoke-WithProcessEnv -Env $envMap -Script {
+            if ($Act -eq 'pull') {
+                $registryServices = Get-RegistryBuildServices -Base $base
+                if ($registryServices.Count) { $runs += , (@('pull') + $registryServices) }
+            }
             foreach ($r in $runs) {
                 Invoke-Docker -Arguments (@($base) + @($r)); $script:lastCode = $script:Rc
                 if ($script:lastCode -ne 0) { break }

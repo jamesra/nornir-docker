@@ -17,17 +17,23 @@
   Catalogue (short name accepted by -Images / -Tags):
     dev, dev-cursor-base, cursor-worker, prod, cupy
     dashboard, gallery, sam2-trainer
+    segmentation
 
-  Not in this catalogue: eclipse-mosquitto:2 (public), and VikingLegacy images
-  (segmentation-server, grpc-annotation-service, section-correction-service,
-  identity-standalone, identity-webapi, identity-all-services).
+  segmentation pulls ghcr.io/<Owner>/viking-segmentation-server:latest and tags
+  it viking-segmentation-server:latest, the image the viking-segmentation stack
+  runs by default. `stack.ps1 viking-segmentation up` then starts it without a
+  build.
+
+  Not in this catalogue: eclipse-mosquitto:2 (public), and the other Viking
+  images (grpc-annotation-service, section-correction-service, identity-*).
 
 .PARAMETER Owner
   GHCR namespace. Default: jamesra (or $env:NORNIR_GHCR_OWNER).
 
 .PARAMETER Images
   Catalogue names or local tags to pull. Default, when -Tags is also empty:
-  prod, cupy. Examples: dev, nornir:cupy, dashboard, gallery, sam2-trainer.
+  prod, cupy. Examples: dev, nornir:cupy, dashboard, gallery, sam2-trainer,
+  segmentation.
 
 .PARAMETER Tags
   Same as -Images. Matches docker-build.ps1 and docker-push.ps1.
@@ -74,6 +80,9 @@
 
 .EXAMPLE
   .\nornir-docker\docker-pull.ps1 -Images dev,gallery
+
+.EXAMPLE
+  .\nornir-docker\docker-pull.ps1 -Images segmentation
 #>
 param(
     [string]$Owner = '',
@@ -251,6 +260,12 @@ function Get-PullCatalogue {
             Key = 'sam2-trainer'; Local = 'sam2-trainer:dev'; RemoteRepo = "ghcr.io/$OwnerName/sam2-trainer"; Floating = 'dev'
             VersionTag = $(if ($versionSuffix) { "dev-$versionSuffix" } else { '' })
             Aliases = @('sam2', 'sam2-trainer', 'trainer', 'sam2-trainer:dev')
+        },
+        @{
+            # Versioned tags are Viking commit SHAs, not VERSION, so only :latest is known here.
+            Key = 'segmentation'; Local = 'viking-segmentation-server:latest'; RemoteRepo = "ghcr.io/$OwnerName/viking-segmentation-server"; Floating = 'latest'
+            VersionTag = ''
+            Aliases = @('segmentation', 'seg', 'viking-segmentation', 'viking-segmentation-server', 'viking-segmentation-server:latest')
         }
     )
 }
@@ -399,8 +414,8 @@ if ($List) {
     Write-Host ''
     Write-Host 'clean = GHCR tag digest is already on this local image. dirty = tag missing or different. missing = not pulled locally. unknown = registry check failed (a pull will be attempted).'
     Write-Host 'Default pull (no -Images or -Tags): prod, cupy. -IncludeDashboard adds nornir-dashboard:latest only.'
-    Write-Host 'Pass -Images for dev, dev-cursor-base, cursor-worker, gallery, or sam2-trainer.'
-    Write-Host 'Not listed: eclipse-mosquitto:2 (public), and VikingLegacy images (segmentation-server, grpc-annotation-service, section-correction-service, identity-standalone, identity-webapi, identity-all-services).'
+    Write-Host 'Pass -Images for dev, dev-cursor-base, cursor-worker, gallery, sam2-trainer, or segmentation.'
+    Write-Host 'Not listed: eclipse-mosquitto:2 (public), and the other Viking images (grpc-annotation-service, section-correction-service, identity-*).'
     return
 }
 
