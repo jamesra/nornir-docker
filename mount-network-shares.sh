@@ -2,6 +2,13 @@
 # Apply in-container CIFS/NFS mounts from /etc/nornir-net-mounts/nas-mounts.tsv.
 # Enabled when NORNIR_NET_MOUNTS=1 (compose.net-mounts.override.yaml / -DevParityMounts).
 # Requires CAP_SYS_ADMIN (+ typically DAC_READ_SEARCH) and cifs/nfsv4 on the shared WSL2 kernel.
+#
+# A share that is offline (server not answering, or the mount fails) does NOT stop the container: it is
+# logged, and its mount point gets an empty read-only tmpfs, so a build that targets it fails at once
+# (read-only file system) instead of writing into the container's own disk. The offline targets are
+# listed in ${NORNIR_NET_MOUNTS_OFFLINE_FILE} (default /run/nornir-offline-mounts). Two ways to keep the old
+# "any failure stops the container" behaviour: add the option x-required to a row's options column (it is
+# removed before mount(8) sees it), or set NORNIR_NET_MOUNTS_STRICT=1 for every row.
 set -euo pipefail
 
 if [[ "${NORNIR_NET_MOUNTS:-}" != "1" ]]; then
@@ -78,9 +85,37 @@ diagnose_mount_failure() {
   echo "mount-network-shares: check username/password/domain in .cred, SMB version (vers=), and share ACLs on the server" >&2
 }
 
+# Quick TCP check of the file server, so an offline server costs seconds, not the kernel's mount timeout.
+# Unknown filesystem types are not checked (return 0).
+server_reachable() {
+  local fstype="$1" source="$2" host port
+  case "${fstype}" in
+    cifs) host="${source#//}"; host="${host%%/*}"; port=445 ;;
+    nfs|nfs4) host="${source%%:*}"; port=2049 ;;
+    *) return 0 ;;
+  esac
+  timeout "${NORNIR_NET_MOUNTS_CONNECT_TIMEOUT:-5}" bash -c "exec 3<>/dev/tcp/${host}/${port}" 2>/dev/null
+}
+
+# An offline share's mount point becomes an empty read-only tmpfs: writes fail loudly (EROFS) rather than
+# landing in the container's writable layer, where they would be lost on restart.
+block_offline_target() {
+  local target="$1"
+  mkdir -p "${target}"
+  if mount -t tmpfs -o ro,size=4k,mode=0555 nornir-offline "${target}" 2>/dev/null; then
+    echo "mount-network-shares: ${target} is OFFLINE; an empty read-only tmpfs is mounted there, so builds using it fail instead of writing locally" >&2
+  else
+    chmod 0555 "${target}" 2>/dev/null || true
+    echo "mount-network-shares: ${target} is OFFLINE and could not be blocked; writes there land in the container's disk and are lost on restart" >&2
+  fi
+}
+
 if ! prepare_secure_credentials; then
   exit 1
 fi
+
+OFFLINE_FILE="${NORNIR_NET_MOUNTS_OFFLINE_FILE:-/run/nornir-offline-mounts}"
+: > "${OFFLINE_FILE}" 2>/dev/null || OFFLINE_FILE=""
 
 uid_opt="uid=$(id -u)"
 gid_opt="gid=$(id -g)"
@@ -119,6 +154,27 @@ while IFS=$'\t' read -r fstype source target options || [[ -n "${fstype:-}" ]]; 
 
   mkdir -p "${target}"
 
+  # x-required (or NORNIR_NET_MOUNTS_STRICT=1): a failure stops the container. The token is ours, not mount(8)'s.
+  required="${NORNIR_NET_MOUNTS_STRICT:-0}"
+  kept_opts=()
+  IFS=',' read -ra opt_tokens <<< "${options:-}"
+  for token in "${opt_tokens[@]:-}"; do
+    if [[ "${token}" == "x-required" ]]; then required=1; continue; fi
+    if [[ -n "${token}" ]]; then kept_opts+=("${token}"); fi
+  done
+  options="$(IFS=,; printf '%s' "${kept_opts[*]:-}")"
+
+  if ! server_reachable "${fstype}" "${source}"; then
+    echo "mount-network-shares: server for ${source} is not answering (${NORNIR_NET_MOUNTS_CONNECT_TIMEOUT:-5}s TCP check)" >&2
+    if [[ "${required}" == "1" ]]; then
+      echo "mount-network-shares: ${target} is required (x-required / NORNIR_NET_MOUNTS_STRICT); stopping" >&2
+      exit 1
+    fi
+    block_offline_target "${target}"
+    if [[ -n "${OFFLINE_FILE}" ]]; then echo "${target}" >> "${OFFLINE_FILE}"; fi
+    continue
+  fi
+
   opts="${options:-}"
   opts="$(rewrite_credentials_path "${opts}")"
   if [[ -n "${opts}" ]]; then
@@ -132,7 +188,10 @@ while IFS=$'\t' read -r fstype source target options || [[ -n "${fstype:-}" ]]; 
     echo "mount-network-shares: FAILED mounting ${source} -> ${target}" >&2
     diagnose_mount_failure "${source}" "${target}" "${opts}"
     echo "mount-network-shares: check CAP_SYS_ADMIN, cifs/nfs modules (grep cifs /proc/filesystems), and credentials under ${NET_CREDS_SRC}" >&2
-    exit 1
+    if [[ "${required}" == "1" ]]; then exit 1; fi
+    block_offline_target "${target}"
+    if [[ -n "${OFFLINE_FILE}" ]]; then echo "${target}" >> "${OFFLINE_FILE}"; fi
+    continue
   fi
   mounted_any=1
   findmnt -no FSTYPE,SOURCE,TARGET "${target}" || true
@@ -140,4 +199,7 @@ done < "${MANIFEST}"
 
 if [[ "${mounted_any}" -eq 0 ]]; then
   echo "mount-network-shares: no mount rows in ${MANIFEST} (only comments/blank?)" >&2
+fi
+if [[ -n "${OFFLINE_FILE}" && -s "${OFFLINE_FILE}" ]]; then
+  echo "mount-network-shares: OFFLINE (read-only, empty): $(paste -sd' ' "${OFFLINE_FILE}")" >&2
 fi
