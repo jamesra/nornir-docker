@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   Creates a unique workspace under <ROOT>/Work/nornir-build-<version>-<stamp>, enables
-  in-container CIFS/NFS from shared Run\nornir-net-mounts (CAP_SYS_ADMIN), picks nornir:cupy
+  in-container CIFS/NFS from shared Run\nornir-net-mounts (CAP_SYS_ADMIN), adds CAP_SYS_PTRACE so
+  py-spy can profile running builds, picks nornir:cupy
   vs nornir:prod via GPU probe when -Image is omitted, and starts an interactive container.
   This is not the programmer Dev Container (run-cursor-dev) or the AI worker (start-cursor-worker).
 
@@ -224,6 +225,9 @@ if (-not [string]::IsNullOrWhiteSpace($ContainerName)) {
 
 Add-NornirDockerGpuArgs -RunArgs $runArgs -Gpu:$useGpu -ForceGpuFlagOnly
 Add-NornirDockerUlimitArgs -RunArgs $runArgs
+# Let py-spy (and gdb) attach to running builds for live profiling.
+[void]$runArgs.Add('--cap-add')
+[void]$runArgs.Add('SYS_PTRACE')
 Add-NornirDockerExtraRunArgs -RunArgs $runArgs
 
 # Shared memory: multiprocessing pools fail with Docker's 64 MB default.
