@@ -5,7 +5,10 @@
 .DESCRIPTION
   Runs docker compose -f compose.dashboard.yaml for the fixed project name
   ``nornir-dashboard`` (stable volumes/networks across cwd). Loads
-  dashboard.run.env from Run\nornir-dashboard when present (localhost binds).
+  nornir-dashboard.run.env (legacy name dashboard.run.env) from Run\nornir-dashboard
+  when present and passes it to compose. NORNIR_DASHBOARD_BIND_HOST and
+  NORNIR_DASHBOARD_HOST_PORT (defaults 127.0.0.1 and 80) set the published
+  address; the health probe and printed URL use the same values.
 
   Use -Rebuild when deploying local nornir-builddashboard code changes during
   testing: rebuilds the nornir-dashboard image and recreates only that
@@ -92,6 +95,13 @@ if (Test-Path -LiteralPath $runEnv) {
     $envFiles += $runEnv
 }
 
+# Published dashboard address, from the same variables (and defaults) as the
+# ports: entry in compose.dashboard.yaml. A wildcard bind is probed on loopback.
+$dashboardBindHost = if ($env:NORNIR_DASHBOARD_BIND_HOST) { $env:NORNIR_DASHBOARD_BIND_HOST } else { '127.0.0.1' }
+$dashboardHostPort = if ($env:NORNIR_DASHBOARD_HOST_PORT) { $env:NORNIR_DASHBOARD_HOST_PORT } else { '80' }
+$dashboardProbeHost = if ($dashboardBindHost -in @('0.0.0.0', '::', '[::]')) { '127.0.0.1' } else { $dashboardBindHost }
+$dashboardUrl = if ($dashboardHostPort -eq '80') { "http://$dashboardProbeHost/" } else { "http://${dashboardProbeHost}:$dashboardHostPort/" }
+
 function Invoke-DashboardCompose {
     param(
         [Parameter(Mandatory = $true)]
@@ -151,7 +161,7 @@ function Test-DashboardServiceRunning {
 
 function Test-DashboardHttp {
     try {
-        $probe = Invoke-WebRequest -Uri 'http://127.0.0.1:8087/' -UseBasicParsing -TimeoutSec 3
+        $probe = Invoke-WebRequest -Uri $dashboardUrl -UseBasicParsing -TimeoutSec 3
         return ($probe.StatusCode -ge 200 -and $probe.StatusCode -lt 500)
     }
     catch {
@@ -239,7 +249,7 @@ try {
             )
             if ($code -ne 0) {
                 if (Test-DashboardHttp) {
-                    Write-Warning "compose recreate failed (exit $code), but dashboard already responds on :8087 - continuing"
+                    Write-Warning "compose recreate failed (exit $code), but dashboard already responds at $dashboardUrl - continuing"
                 }
                 else {
                     Write-Error "docker compose failed (exit $code)"
@@ -252,7 +262,7 @@ try {
             if ($code -ne 0) {
                 # Host mosquitto (or another stack) may already own :1883; dashboard UI alone is enough.
                 if (Test-DashboardHttp) {
-                    Write-Warning "compose up failed (exit $code), but dashboard already responds on :8087 - continuing"
+                    Write-Warning "compose up failed (exit $code), but dashboard already responds at $dashboardUrl - continuing"
                 }
                 else {
                     Write-Error "docker compose failed (exit $code)"
@@ -266,7 +276,7 @@ finally {
 }
 
 if (-not $Down) {
-    Write-Host 'Dashboard: http://127.0.0.1:8087'
+    Write-Host "Dashboard: $dashboardUrl"
     Write-Host 'MQTT (host bind): see NORNIR_MQTT_BIND_HOST (default 127.0.0.1; widen only with a firewall rule)'
     if ($Rebuild) {
         Write-Host 'Hard-refresh the browser after -Rebuild. Live progress during the brief downtime is not replayed; retained run meta + SQLite history should reappear.'
