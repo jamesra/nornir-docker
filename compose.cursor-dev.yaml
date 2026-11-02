@@ -50,6 +50,14 @@ x-cursor-dev-app: &cursor-dev-app
       INSTALL_MONOREPO_EDITABLES: "0"
       NORNIR_HEADLESS: 1
   image: nornir:dev-cursor-base
+  # py-spy / strace / gdb need ptrace; Docker's default seccomp still blocks it without this.
+  # drop-sys-admin-after-mounts only removes SYS_ADMIN. If compose.net-mounts.override.yaml is
+  # layered on, it replaces this entire cap_add / security_opt list — that override must
+  # re-include SYS_PTRACE and seccomp:unconfined (see example.compose.net-mounts.override.yaml).
+  cap_add:
+    - SYS_PTRACE
+  security_opt:
+    - seccomp:unconfined
   # Pass the documented run settings (NORNIR_SYNC_REMOTE, NORNIR_SUBMODULE_UPDATE, GITHUB_TOKEN,
   # NORNIR_TILE_*, NORNIR_GPU_PYRAMID_BATCH_MB, ...) into the container; `environment:` below wins.
   env_file:

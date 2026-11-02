@@ -71,10 +71,12 @@ RUN apt-get purge -y build-essential \
 # mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
 # cifs-utils / nfs-common: optional in-container NAS mounts (NORNIR_NET_MOUNTS=1 + compose override)
 # libcap2-bin: capsh fallback to drop CAP_SYS_ADMIN after mounts
+# strace: syscall tracing (needs compose.cursor-dev.yaml CAP_SYS_PTRACE + seccomp:unconfined)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libgl1 libosmesa6 mosquitto mosquitto-clients \
         cifs-utils nfs-common keyutils libcap2-bin \
+        strace \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
