@@ -71,10 +71,11 @@ RUN apt-get purge -y build-essential \
 # mosquitto: optional MQTT log broker for nornir_shared.prettyoutput (localhost:1883)
 # cifs-utils / nfs-common: in-container NAS mounts (NORNIR_NET_MOUNTS=1; path-B, CAP_SYS_ADMIN at run)
 # libcap2-bin: capsh fallback to drop CAP_SYS_ADMIN after mounts (setpriv comes with util-linux)
+# time: GNU time (/usr/bin/time -v) for wall time and peak RSS of import and build runs
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         mosquitto mosquitto-clients \
-        cifs-utils nfs-common keyutils libcap2-bin \
+        cifs-utils nfs-common keyutils libcap2-bin time \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PIP_NO_CACHE_DIR=1 \
