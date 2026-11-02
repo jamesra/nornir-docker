@@ -35,6 +35,8 @@ typing_extensions>=4.14.0
 validators==0.35.0
 
 psutil>=7.0.0
+# nornir-pools caps BLAS/OpenMP threads per pool worker with threadpoolctl.
+threadpoolctl>=3.1
 
 # PyOpenGL: required for nornir-pyre import chain (gl_engine) during umbrella pytest collection.
 PyOpenGL>=3.1.0
