@@ -228,6 +228,9 @@ Add-NornirDockerUlimitArgs -RunArgs $runArgs
 # Let py-spy (and gdb) attach to running builds for live profiling.
 [void]$runArgs.Add('--cap-add')
 [void]$runArgs.Add('SYS_PTRACE')
+# docker-init as PID 1: forwards SIGTERM (PID 1 'sleep infinity' ignored it, so every stop
+# waited out the timeout) and reaps orphans of docker-exec'd jobs (srv zombies, 2026-11).
+[void]$runArgs.Add('--init')
 Add-NornirDockerExtraRunArgs -RunArgs $runArgs
 
 # Shared memory: multiprocessing pools fail with Docker's 64 MB default.
