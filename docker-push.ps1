@@ -213,7 +213,9 @@ function New-VikingCatalogueItem {
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Stack,
         [Parameter(Mandatory)][string]$OwnerName,
-        [Parameter(Mandatory)][string]$FallbackVersion,
+        # Empty when no Viking checkout is beside this repo (e.g. a clean release clone); the tag
+        # then comes from the image's revision label, and nornir-only pushes must still work.
+        [Parameter(Mandatory)][AllowEmptyString()][string]$FallbackVersion,
         [string[]]$Aliases = @()
     )
     return @{
