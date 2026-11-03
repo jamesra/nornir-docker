@@ -15,24 +15,27 @@
   Catalogue (short name accepted by -Images):
     dev, dev-cursor-base, cursor-worker, prod, cupy
     dashboard, gallery, sam2-trainer
-    segmentation (opt-in only: never part of the default set)
+    Viking (opt-in only: never part of the default set):
+      identity, annotation, corrections, certs, segmentation
+  Groups: viking (the five Viking images), backend (every image a
+  connectomes-deploy host runs: prod, cupy, dashboard, gallery and the Viking images).
 
-  segmentation pushes viking-segmentation-server:latest, built by the
-  viking-segmentation stack, as ghcr.io/<Owner>/viking-segmentation-server:latest
-  and :<Viking short SHA>. The SHA is read from VIKING_REPO_ROOT_HOST, or from a
-  Viking checkout next to the monorepo, so build from that checkout first.
+  Viking images are built by connectomes-deploy's `stack.ps1 <stack> build`, which
+  stamps org.opencontainers.image.revision with the Viking commit. They push as
+  ghcr.io/<Owner>/<name>:latest and :<first 8 characters of that revision>. An
+  image with no revision label, or one built from a dirty checkout, is refused
+  unless -Force (then the version tag falls back to the Viking checkout's short
+  SHA, read from VIKING_REPO_ROOT_HOST or a Viking checkout next to the monorepo).
 
-  Not in this catalogue: eclipse-mosquitto:2 (public), and the other Viking
-  images (grpc-annotation-service, section-correction-service, identity-*,
-  certbot renewers).
+  Not in this catalogue: eclipse-mosquitto:2 and nginx (public upstream images).
 
 .PARAMETER Owner
   GHCR namespace. Default: jamesra (or $env:NORNIR_GHCR_OWNER).
 
 .PARAMETER Images
-  Catalogue names or local tags to push. Default: the whole catalogue except
-  segmentation. Examples: cupy, nornir:dev, dashboard, gallery, sam2-trainer,
-  segmentation.
+  Catalogue names, groups, or local tags to push. Default: the whole catalogue
+  except the Viking images. Examples: cupy, nornir:dev, dashboard, gallery,
+  sam2-trainer, segmentation, viking, backend.
 
 .PARAMETER Tags
   Same as -Images. Kept so existing ` -Tags prod,cupy ` commands still select
@@ -71,6 +74,9 @@
 
 .EXAMPLE
   .\nornir-docker\docker-push.ps1 -Images segmentation
+
+.EXAMPLE
+  .\nornir-docker\docker-push.ps1 -Images viking -List
 #>
 param(
     [string]$Owner = '',
@@ -200,12 +206,33 @@ function Get-VikingShortSha {
     return ''
 }
 
+function New-VikingCatalogueItem {
+    <# A Viking image: opt-in, version tag from its revision label, built by connectomes-deploy's stack.ps1. #>
+    param(
+        [Parameter(Mandatory)][string]$Key,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Stack,
+        [Parameter(Mandatory)][string]$OwnerName,
+        [Parameter(Mandatory)][string]$FallbackVersion,
+        [string[]]$Aliases = @()
+    )
+    return @{
+        Key = $Key; Local = "${Name}:latest"; RemoteRepo = "ghcr.io/$OwnerName/$Name"; Floating = 'latest'; VersionTag = $FallbackVersion
+        Aliases = @($Key, $Name, "${Name}:latest") + $Aliases
+        Rebuild = "connectomes-deploy/stack.ps1 $Stack build"
+        OptIn = $true
+        VersionFrom = 'revision'
+        Groups = @('viking', 'backend')
+    }
+}
+
 function Get-PushCatalogue {
     param(
         [Parameter(Mandatory)][string]$OwnerName,
         [Parameter(Mandatory)][string]$Version
     )
     $nornir = "ghcr.io/$OwnerName/nornir"
+    $vikingSha = Get-VikingShortSha
     return @(
         @{
             Key = 'dev'; Local = 'nornir:dev'; RemoteRepo = $nornir; Floating = 'dev'; VersionTag = "dev-$Version"
@@ -226,33 +253,36 @@ function Get-PushCatalogue {
             Key = 'prod'; Local = 'nornir:prod'; RemoteRepo = $nornir; Floating = 'prod'; VersionTag = "prod-$Version"
             Aliases = @('prod', 'nornir:prod')
             Rebuild = 'docker-build.ps1 -Images prod'
+            Groups = @('backend')
         },
         @{
             Key = 'cupy'; Local = 'nornir:cupy'; RemoteRepo = $nornir; Floating = 'cupy'; VersionTag = "cupy-$Version"
             Aliases = @('cupy', 'nornir:cupy')
             Rebuild = 'docker-build.ps1 -Images cupy'
+            Groups = @('backend')
         },
         @{
             Key = 'dashboard'; Local = 'nornir-dashboard:latest'; RemoteRepo = "ghcr.io/$OwnerName/nornir-dashboard"; Floating = 'latest'; VersionTag = $Version
             Aliases = @('dashboard', 'nornir-dashboard', 'nornir-dashboard:latest')
             Rebuild = 'nornir-docker/start-dashboard.ps1 -Rebuild'
+            Groups = @('backend')
         },
         @{
             Key = 'gallery'; Local = 'nornir-annotation-gallery:latest'; RemoteRepo = "ghcr.io/$OwnerName/nornir-annotation-gallery"; Floating = 'latest'; VersionTag = $Version
             Aliases = @('gallery', 'annotation-gallery', 'nornir-annotation-gallery', 'nornir-annotation-gallery:latest')
             Rebuild = 'Sam2SegmentationTrainer: docker compose -f docker/compose.cursor-dev.yaml build annotation-gallery'
+            Groups = @('backend')
         },
         @{
             Key = 'sam2-trainer'; Local = 'sam2-trainer:dev'; RemoteRepo = "ghcr.io/$OwnerName/sam2-trainer"; Floating = 'dev'; VersionTag = "dev-$Version"
             Aliases = @('sam2', 'sam2-trainer', 'trainer', 'sam2-trainer:dev')
             Rebuild = 'D:\Docker\Builds\sam2-trainer\build.ps1'
         },
-        @{
-            Key = 'segmentation'; Local = 'viking-segmentation-server:latest'; RemoteRepo = "ghcr.io/$OwnerName/viking-segmentation-server"; Floating = 'latest'; VersionTag = (Get-VikingShortSha)
-            Aliases = @('segmentation', 'seg', 'viking-segmentation', 'viking-segmentation-server', 'viking-segmentation-server:latest')
-            Rebuild = 'nornir-docker/deploy/stack.ps1 viking-segmentation build'
-            OptIn = $true
-        }
+        (New-VikingCatalogueItem -Key 'identity' -Name 'viking-identity' -Stack 'viking-identity' -OwnerName $OwnerName -FallbackVersion $vikingSha),
+        (New-VikingCatalogueItem -Key 'annotation' -Name 'viking-annotation' -Stack 'viking-annotation' -OwnerName $OwnerName -FallbackVersion $vikingSha),
+        (New-VikingCatalogueItem -Key 'corrections' -Name 'viking-corrections' -Stack 'viking-corrections' -OwnerName $OwnerName -FallbackVersion $vikingSha),
+        (New-VikingCatalogueItem -Key 'certs' -Name 'viking-certs' -Stack 'viking-certs' -OwnerName $OwnerName -FallbackVersion $vikingSha),
+        (New-VikingCatalogueItem -Key 'segmentation' -Name 'viking-segmentation-server' -Stack 'viking-segmentation' -OwnerName $OwnerName -FallbackVersion $vikingSha -Aliases @('seg', 'viking-segmentation'))
     )
 }
 
@@ -266,9 +296,15 @@ function Resolve-PushSelection {
         return @($Catalogue | Where-Object { -not $_.OptIn })
     }
     $selected = [ordered]@{}
-    foreach ($name in $Requested) {
+    # `pwsh -File docker-push.ps1 -Images a,b` passes one string, so split on commas here too.
+    foreach ($name in ($Requested -split ',')) {
         $token = $name.Trim()
         if ([string]::IsNullOrWhiteSpace($token)) {
+            continue
+        }
+        $group = @($Catalogue | Where-Object { $_.Groups -contains $token })
+        if ($group.Count) {
+            foreach ($item in $group) { $selected[$item.Key] = $item }
             continue
         }
         $hit = $null
@@ -311,6 +347,7 @@ function Get-ImagePushPlan {
         PushFloating = $false
         PushVersion = $false
         Action = 'skip'
+        RevisionProblem = ''
     }
     $repoDigests = Get-LocalRepoDigests -LocalTag $Item.Local
     if ($null -eq $repoDigests) {
@@ -328,6 +365,19 @@ function Get-ImagePushPlan {
     $getLabel = { param($n) if ($labelsJson -match ('"' + [regex]::Escape($n) + '":"([^"]*)"')) { $Matches[1] } else { '' } }
     $plan.Revision = & $getLabel 'org.opencontainers.image.revision'
     $plan.Built = & $getLabel 'org.opencontainers.image.created'
+    if ($Item.VersionFrom -eq 'revision') {
+        if ([string]::IsNullOrWhiteSpace($plan.Revision)) {
+            $plan.RevisionProblem = 'no org.opencontainers.image.revision label'
+        }
+        elseif ($plan.Revision -match '-dirty$') {
+            $plan.RevisionProblem = "built from a dirty checkout ($($plan.Revision))"
+        }
+        else {
+            $plan.VersionTag = $plan.Revision.Substring(0, [Math]::Min(8, $plan.Revision.Length))
+        }
+        $Item = @{} + $Item
+        $Item.VersionTag = $plan.VersionTag
+    }
 
     $floatingRef = "$($Item.RemoteRepo):$($Item.Floating)"
     $versionRef = "$($Item.RemoteRepo):$($Item.VersionTag)"
@@ -368,6 +418,12 @@ function Get-ImagePushPlan {
 
     $plan.PushFloating = $Force -or ($plan.FloatingState -ne 'clean')
     $plan.PushVersion = $hasVersion -and ($Force -or ($plan.VersionState -ne 'clean'))
+    if ($plan.RevisionProblem -and -not $Force) {
+        $plan.PushFloating = $false
+        $plan.PushVersion = $false
+        $plan.Action = "refuse ($($plan.RevisionProblem); rebuild from a clean checkout or -Force)"
+        return $plan
+    }
     if ($plan.PushFloating -and $plan.PushVersion) {
         $plan.Action = 'push'
     }
@@ -424,9 +480,9 @@ if ($List) {
     Write-Host ''
     Write-Host 'clean = GHCR tag digest is already on this local image. dirty = tag missing or different. missing = not built locally. unknown = registry check failed (a push will be attempted).'
     if (-not $explicit) {
-        Write-Host 'Opt-in (pass -Images): segmentation (viking-segmentation-server:latest).'
+        Write-Host 'Opt-in (pass -Images, or the group viking / backend): identity, annotation, corrections, certs, segmentation.'
     }
-    Write-Host 'Not listed: eclipse-mosquitto:2 (public), and the other Viking images (grpc-annotation-service, section-correction-service, identity-*).'
+    Write-Host 'Not listed: eclipse-mosquitto:2 and nginx (public upstream images).'
     return
 }
 
@@ -440,6 +496,12 @@ foreach ($plan in $plans) {
             Write-Error $message
         }
         Write-Warning $message
+        $skipped++
+        Write-Host ''
+        continue
+    }
+    if ($plan.RevisionProblem -and -not $Force) {
+        Write-Warning "  Not pushing $($plan.Local): $($plan.RevisionProblem). Rebuild from a clean checkout ($($plan.Rebuild)) or pass -Force."
         $skipped++
         Write-Host ''
         continue
