@@ -66,3 +66,14 @@ These apply to every agent session that runs Nornir builds in a build container.
     program. Prefer fixing the default behaviour. Fixes for bug damage are one-off scripts or
     delete-and-rerun, not new pipelines or options. (James, 2026-11-10)
 
+15. **Crushed volumes imported before the `Quantized` change: check, tell James, rename.** New crushed
+    imports (`ImportIDoc`/`ImportMRC` without `-NoCrush`) write the crushed tiles to a filter named
+    `Quantized`; legacy (`-NoCrush`) imports stay in `Raw8`/`Raw16`. Volumes crushed earlier hold their
+    crushed codes in `Raw8` (or `Raw16`) instead. **Before any import into an existing volume,** look for
+    a `Raw8`/`Raw16` filter carrying `CrushStep` (crushed) in the target channel's `VolumeData.xml`. If
+    you find one, stop and tell James before importing. The fix is to rename it to `Quantized` first
+    (`nornir-build RenameFilter`, exact name), not to reimport. Never special-case the old name in code
+    or scripts, and never mix names inside one volume. After the rename the TEMBuild chain with
+    `Quantized` (`TEMBuildCrushed.sh`) builds `Leveled` for TEMAlign.
+    **Deprecated:** delete this rule once RC1, RC2 and RC3 have all been ported to `Quantized`
+    (renamed or reimported). (James, 2026-11-10)
