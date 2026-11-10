@@ -73,7 +73,7 @@ These apply to every agent session that runs Nornir builds in a build container.
     a `Raw8`/`Raw16` filter carrying `CrushStep` (crushed) in the target channel's `VolumeData.xml`. If
     you find one, stop and tell James before importing. The fix is to rename it to `Quantized` first
     (`nornir-build RenameFilter`, exact name), not to reimport. Never special-case the old name in code
-    or scripts, and never mix names inside one volume. After the rename the TEMBuild chain with
-    `Quantized` (`TEMBuildCrushed.sh`) builds `Leveled` for TEMAlign.
+    or scripts, and never mix names inside one volume. After the rename TEMBuild (its `TEMBuildCrushed`
+    chain) builds `Leveled` for TEMAlign.
     **Deprecated:** delete this rule once RC1, RC2 and RC3 have all been ported to `Quantized`
     (renamed or reimported). (James, 2026-11-10)

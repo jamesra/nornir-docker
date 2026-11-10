@@ -20,9 +20,11 @@ Paths and commands below are srv's layout: `/srv/docker` is `$NORNIR_DOCKER_USER
    - **Unlocked Grids with chain checksum mismatches:** ask. A validating Select deletes them.
 3. Check the stage list against CLAUDE.md rules 4 and 5, and the known-issues list (e.g. the translate
    regression: don't rebuild C++-built mosaics).
-   - **Never mix crushed and legacy sections** in one volume (James, 2026-11-10). A crushed section has
-     no Leveled, and TEMAlign, Assemble, Export and SAM2 drop it silently. Crushed volumes use the
-     crushed scripts (TEMBuildCrushed); repairs in legacy volumes use `-NoCrush` imports.
+   - **Crushed and legacy sections can share a volume** (James, 2026-11-10): crushed tiles are in
+     `Quantized`, legacy tiles in `Raw8`. `TEMBuild` runs `TEMBuildLegacy` and then `TEMBuildCrushed`;
+     each skips the other kind, and both leave a `Leveled` filter for TEMAlign (assembled images only in
+     crushed sections). A volume crushed before 2026-11-10 holds its codes in `Raw8`: see rule 15 of the
+     build-agent rules before importing into it.
    - **Never pass `-CameraBpp` to a crush import** (James, 2026-11-10). Crush sets its step from measured
      noise and never reads it; Nornir is making it an error. It is only valid with `-NoCrush`.
 4. Run `nornir-volume-backup` if this build will change the volume. It is skipped if a backup from the
