@@ -256,6 +256,14 @@ $null = New-Item -ItemType Directory -Force -Path $logsDir
 [void]$runArgs.Add('-e')
 [void]$runArgs.Add('NORNIR_LOG_ROOT=/var/log/nornir')
 
+# Persistent projects: scripts, records and state that must outlive a container rebuild (each rebuild gets a new
+# /workspace under Work, and `stack.ps1 prune` deletes old ones). One folder per topic: /projects/<topic>.
+# NORNIR_DOCKER_PROJECTS_ROOT overrides the host path. Never under Work.
+$projectsDir = if ($env:NORNIR_DOCKER_PROJECTS_ROOT) { $env:NORNIR_DOCKER_PROJECTS_ROOT } else { Join-Path $DockerUserRoot 'Projects' }
+$null = New-Item -ItemType Directory -Force -Path $projectsDir
+[void]$runArgs.Add('-v')
+[void]$runArgs.Add("${projectsDir}:/projects")
+
 # MQTT: join the co-located dashboard network when it exists. This works on Linux, where the
 # broker binds 127.0.0.1 and is unreachable via host-gateway. Otherwise use host.docker.internal.
 $mqttNetwork = if ($env:NORNIR_MQTT_NETWORK) { $env:NORNIR_MQTT_NETWORK } else { 'nornir-dashboard_default' }
