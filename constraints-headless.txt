@@ -40,3 +40,6 @@ threadpoolctl>=3.1
 
 # PyOpenGL: required for nornir-pyre import chain (gl_engine) during umbrella pytest collection.
 PyOpenGL>=3.1.0
+
+# py-spy: sample a running pipeline without restarting it (the launcher grants CAP_SYS_PTRACE).
+py-spy>=0.4.0
