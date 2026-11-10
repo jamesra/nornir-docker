@@ -10,7 +10,7 @@ if __name__ == '__main__':
     from nornir_imageregistration.transforms import factory
     import imageio.v3 as iio
     from scipy.ndimage import map_coordinates
-    T = os.environ.get('VOL', '/storage2/RC3').rstrip('/') + '/TEM'; O = '/tmp/rvar'; os.makedirs(O, exist_ok=True)
+    T = (os.environ.get('VOL') or sys.exit('Set VOL to the volume root, e.g. VOL=/storage2/RC3')).rstrip('/') + '/TEM'; O = '/tmp/rvar'; os.makedirs(O, exist_ok=True)
     H = lambda x: x.get() if hasattr(x, 'get') else np.asarray(x)
     img = lambda s, f, d: f'{T}/{int(s):04d}/TEM/{f}/Images/{d:03d}/{int(s):04d}_TEM_{f}.png'
     def ncc(p, m, c):

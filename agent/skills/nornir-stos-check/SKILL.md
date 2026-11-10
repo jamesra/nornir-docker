@@ -37,10 +37,10 @@ once, when the user approves the pairs. Update this table when Nornir answers.
   (e.g. "Masking operation removes all points") prints a traceback but the run still exits 0.
 
 ## Score
-Scripts in `/var/log/nornir/scripts` inside the container (see its README):
+Scripts in `/opt/nornir/agent/container-scripts` inside the image (README beside them). Set `VOL=<volume root>`; there is no default volume:
 ```bash
-docker exec nornir-build bash -c 'cd /var/log/nornir/scripts && python -Xfrozen_modules=off ncc_pairs.py 565-566 564-565 566-567'
-docker exec nornir-build bash -c 'cd /var/log/nornir/scripts && FILTER=Leveled python -Xfrozen_modules=off ncc_pairs.py 565-566'
+docker exec nornir-build bash -c 'cd /opt/nornir/agent/container-scripts && VOL=/storage2/RC3 python -Xfrozen_modules=off ncc_pairs.py 565-566 564-565 566-567'
+docker exec nornir-build bash -c 'cd /opt/nornir/agent/container-scripts && VOL=/storage2/RC3 FILTER=Leveled python -Xfrozen_modules=off ncc_pairs.py 565-566'
 ```
 - Thresholds are per volume. On RC3, masked ds32 **Blob** NCC ≥ 0.13 meant registered and good pairs
   scored ~0.3–0.55. On another volume, calibrate first: score a spread of pairs the user trusts and

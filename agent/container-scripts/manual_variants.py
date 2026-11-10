@@ -5,7 +5,7 @@ if __name__ == '__main__':
     from scipy.ndimage import map_coordinates
     from nornir_imageregistration.files import stosfile
     from nornir_imageregistration.transforms import factory
-    T = os.environ.get('VOL', '/storage2/RC3').rstrip('/') + '/TEM'; H = lambda x: x.get() if hasattr(x, 'get') else np.asarray(x)
+    T = (os.environ.get('VOL') or sys.exit('Set VOL to the volume root, e.g. VOL=/storage2/RC3')).rstrip('/') + '/TEM'; H = lambda x: x.get() if hasattr(x, 'get') else np.asarray(x)
     img = lambda s, f, d: f'{T}/{int(s):04d}/TEM/{f}/Images/{d:03d}/{int(s):04d}_TEM_{f}.png'
     def ncc(fn, m, c):
         cb = iio.imread(img(c, 'Blob', 64)).astype(np.float32); cm = iio.imread(img(c, 'Mask', 64)) > 0

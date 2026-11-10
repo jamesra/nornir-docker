@@ -1,10 +1,11 @@
-# Shared build-session scripts (srv)
+# Shared build-session scripts
 
-This folder is `/srv/docker/Logs/nornir-build/scripts` on the host and `/var/log/nornir/scripts` in
-every nornir-build container, current and future (the Logs folder is bind-mounted into each one).
-Use these instead of rewriting them. Python scripts run **inside** the container:
-`docker exec nornir-build bash -c 'cd /var/log/nornir/scripts && python -Xfrozen_modules=off <script> ...'`.
-The shell script runs on the **host**.
+The **host** scripts in this folder (`install_image.sh`, `watch_job.sh`, `notify_session.sh` and the PowerShell
+equivalents) run on the build host, from a nornir checkout (`<checkout>/nornir-docker/agent/host-scripts`). They call
+`claude`, docker and `stack.ps1`, so they cannot run inside the container. The **container** scripts (`ncc_pairs.py`,
+`manual_variants.py`, `refine_variants.py`) are in the image at `/opt/nornir/agent/container-scripts`; run them with
+`docker exec <container> bash -c 'cd /opt/nornir/agent/container-scripts && VOL=<volume root> python -Xfrozen_modules=off <script> ...'`.
+They need `VOL` set (no default volume). Examples below use srv paths (`/storage2/RC3`, `/srv/docker`); use your own.
 
 | Script | Where | What |
 |---|---|---|
@@ -21,6 +22,7 @@ skill for how to read the scores.
 | Script | What |
 |---|---|
 | `watch_job.sh [-m MARKER -n COUNT] [-s] [-t NOTE] "<session>" "<label>" "<done-check>"\|- [<log or 'glob'> ...]` | Run in tmux. One message on the first failure lines in any log, or when done (done-check succeeds, or MARKER lines reach COUNT across all lane logs), then exit. Usage is in the script header. |
+| `Watch-Job.ps1`, `Notify-Session.ps1` | PowerShell 7 equivalents of the two scripts above, for Windows hosts. Same behaviour and messages; the log defaults to `<NORNIR_DOCKER_USER_ROOT>\Logs\nornir-build\notify.log` (`D:\Docker`). |
 | `notify_session.sh "<session>" "<text>"` | Sends text to a Claude session by name through a headless `claude -p` limited to SendMessage/ListAgents. Logged to `../notify.log`. |
 
 Tested 2026-11-10 (from RC1's pattern). See the `nornir-build-run` skill, section 4.

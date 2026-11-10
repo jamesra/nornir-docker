@@ -5,6 +5,9 @@ description: Run a Nornir build (TEMImport, TEMBuild, TEMAlign, or a custom norn
 
 # Run a Nornir build on srv
 
+Paths and commands below are srv's layout: `/srv/docker` is `$NORNIR_DOCKER_USER_ROOT` (`D:\Docker` on Windows),
+`/storageN` are the NAS mounts, `stack` is `stack.ps1`. Substitute your host's values.
+
 ## 1. Gates (stop and ask if any fails)
 
 1. The build is part of the user's request.
@@ -94,7 +97,7 @@ tmux new-session -d -s "$RID" \
   whole conversation, so a Monitor keepalive (30-min cap) or a 2-h poll costs dozens of wakes a day.
   Instead, start a watcher in tmux on the host that messages your session once, on failure or completion:
   ```bash
-  tmux new-session -d -s watch-$RID "/srv/docker/Logs/nornir-build/scripts/watch_job.sh \
+  tmux new-session -d -s watch-$RID "<nornir checkout>/nornir-docker/agent/host-scripts/watch_job.sh \
     '<your session name>' '$RID' '<done-check command>' /srv/docker/Logs/nornir-build/$RID.log"
   # done-check example: "grep -q '^EXIT' /srv/docker/Logs/nornir-build/$RID.log"
   #                  or "! docker exec nornir-build pgrep -f <unique arg>"
@@ -106,7 +109,7 @@ tmux new-session -d -s "$RID" \
   60 s and reports the first failure lines (Traceback, FAILED, OCI runtime, No such container, Killed, ...)
   or "ENDED" with each log's last line, then exits. It sends
   through `notify_session.sh "<session>" "<text>"`, a one-shot headless `claude -p` limited to
-  SendMessage/ListAgents (logged in `/srv/docker/Logs/nornir-build/notify.log`). It sends no routine
+  SendMessage/ListAgents (logged in `$NORNIR_NOTIFY_LOG`, default `<docker root>/Logs/nornir-build/notify.log`). It sends no routine
   progress. Your session name is the one ListAgents shows for you. Then stop: no Monitor or
   ScheduleWakeup loop for build progress (at most one rare fallback). When you next start work,
   check `tmux has-session -t watch-$RID`: if the watcher died, failures go unnoticed.

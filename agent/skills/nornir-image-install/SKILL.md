@@ -25,7 +25,7 @@ description: Install a newly published nornir image (ghcr.io/jamesra/nornir:cupy
 ## 2. Install
 
 ```bash
-/srv/docker/Logs/nornir-build/scripts/install_image.sh sha256:<digest>
+<nornir checkout>/nornir-docker/agent/host-scripts/install_image.sh sha256:<digest>
 ```
 
 The script (host side):

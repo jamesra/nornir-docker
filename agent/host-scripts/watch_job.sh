@@ -14,7 +14,7 @@ shift $((OPTIND-1))
 S=$1; L=$2; DONE=$3; shift 3; PATTERNS=("$@")
 [ -n "$S" ] && [ -n "$L" ] && [ -n "$DONE" ] || { echo "usage: see header" >&2; exit 2; }
 FAIL='STOPPED|FAILED|Traceback|OCI runtime|Error response|No such container|Killed|MemoryError'
-N=/srv/docker/Logs/nornir-build/scripts/notify_session.sh
+N="$(cd "$(dirname "$0")" && pwd)/notify_session.sh"
 declare -A pos
 logs(){ local p f; for p in "${PATTERNS[@]}"; do for f in $p; do [ -f "$f" ] && echo "$f"; done; done | sort -u; }
 [ $FROMSTART = 1 ] || while IFS= read -r f; do pos[$f]=$(stat -c %s "$f"); done < <(logs)

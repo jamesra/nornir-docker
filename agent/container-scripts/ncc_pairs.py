@@ -1,4 +1,4 @@
-"""Masked NCC per pair: StosBrute64 (ds64) and Grid32 (ds32). Usage: [VOL=/storage2/RC3] [FILTER=Blob|Leveled] python ncc_pairs.py 565-566 ...
+"""Masked NCC per pair: StosBrute64 (ds64) and Grid32 (ds32). Usage: VOL=<volume root, required> [FILTER=Blob|Leveled] python ncc_pairs.py 565-566 ...
 0.13 on ds32 Blob = registered. Pair = <mapped>-<control>. Read-only."""
 import os, sys, numpy as np
 if __name__ == '__main__':
@@ -6,7 +6,7 @@ if __name__ == '__main__':
     from scipy.ndimage import map_coordinates
     from nornir_imageregistration.files import stosfile
     from nornir_imageregistration.transforms import factory
-    T = os.environ.get('VOL', '/storage2/RC3').rstrip('/') + '/TEM'; F = os.environ.get('FILTER', 'Blob')
+    T = (os.environ.get('VOL') or sys.exit('Set VOL to the volume root, e.g. VOL=/storage2/RC3')).rstrip('/') + '/TEM'; F = os.environ.get('FILTER', 'Blob')
     H = lambda x: x.get() if hasattr(x, 'get') else np.asarray(x)
     img = lambda s, f, d: f'{T}/{int(s):04d}/TEM/{f}/Images/{d:03d}/{int(s):04d}_TEM_{f}.png'
     def ncc(p, m, c, d):

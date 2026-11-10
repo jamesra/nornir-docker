@@ -12,19 +12,20 @@ says so.
 
 ## 1. Read the source; refresh policy
 
+The image ships the repo skill with its scripts, so read the deployed copy:
+
 ```bash
-git -C /srv/src/nornir fetch -q origin dev          # fetch only; never switch the shared checkout
-git -C /srv/src/nornir show origin/dev:.cursor/skills/rescue-damaged-section/SKILL.md
-git -C /srv/src/nornir log --format='%h %ad %s' --date=short origin/dev -- .cursor/skills/rescue-damaged-section | head
+cat ~/.claude/skills/rescue-damaged-section/SKILL.md      # scripts: ~/.claude/skills/rescue-damaged-section/scripts/
 ```
 
-- srv copy of the scripts: `/srv/docker/Logs/nornir-build/scripts/rescue/` (`/var/log/nornir/scripts/rescue/`
-  in the container), from **04cfb7c** (SKILL.md md5 `37be5c967a9d0c35e02959d0079a2993`). Run them inside
-  the container with the container's python (not the skill's `venv\pyre314\Scripts\python.exe`).
-- **Refresh:** if `git log` shows a newer commit for the skill, diff it against 04cfb7c, re-copy SKILL.md
-  and the scripts (`git show <commit>:<path>`), record the md5s, update the commit here, and tell James
-  what changed. `*_srv.py` files are srv patches (§5); re-apply them to new versions or drop them if the
-  repo now handles crushed sections.
+It is the version in the image you are running. To compare with the repo's newest, fetch only (never switch a shared
+checkout): `git -C <nornir checkout> fetch -q origin dev` then
+`git -C <nornir checkout> show origin/dev:.cursor/skills/rescue-damaged-section/SKILL.md`.
+
+- Scripts: the deployed `scripts/` folder above. Run them inside the container with the container's python (not the
+  skill's `venv\pyre314\Scripts\python.exe`).
+- **srv patches:** the srv session patched some scripts for crushed sections (`*_srv.py`, see §5). They are not in the
+  image; if the repo's scripts now handle crushed sections, use those, otherwise ask Build2 for the patches.
 
 ## 2. srv paths for the skill's Windows paths
 

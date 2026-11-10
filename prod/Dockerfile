@@ -142,6 +142,10 @@ RUN sed -i 's/\r$//' /usr/local/bin/mount-network-shares.sh \
 # Build-agent skills, rules and stos-scoring templates (deployed into ~/.claude by prod-entry.sh at container start).
 # host-scripts/ run on the host and are not needed in the image.
 COPY nornir-docker/agent/skills /opt/nornir/agent/skills
+# Repo-wide skills that build agents also need (single source: .cursor/skills).
+COPY .cursor/skills/notify-dont-poll /opt/nornir/agent/skills/notify-dont-poll
+COPY .cursor/skills/nornir-host-benchmark /opt/nornir/agent/skills/nornir-host-benchmark
+COPY .cursor/skills/rescue-damaged-section /opt/nornir/agent/skills/rescue-damaged-section
 COPY nornir-docker/agent/rules /opt/nornir/agent/rules
 COPY nornir-docker/agent/container-scripts /opt/nornir/agent/container-scripts
 RUN find /opt/nornir/agent -type f \( -name '*.sh' -o -name '*.py' \) -exec sed -i 's/\r$//' {} + \
