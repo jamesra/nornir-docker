@@ -34,6 +34,21 @@ sync_home_scripts() {
   fi
 }
 
+# Build-agent skills and rules from the image into ~/.claude. The image is the source of truth for the ones it ships
+# (copied over any with the same name); other files in ~/.claude are left alone.
+sync_agent_files() {
+  local src="/opt/nornir/agent"
+  local dst="${HOME:-/root}/.claude"
+  [[ -d "${src}/skills" || -d "${src}/rules" ]] || return 0
+  mkdir -p "${dst}/skills" "${dst}/rules"
+  if [[ -d "${src}/skills" ]]; then
+    cp -rf "${src}/skills/." "${dst}/skills/" 2>/dev/null || true
+  fi
+  if [[ -d "${src}/rules" ]]; then
+    cp -f "${src}/rules/"*.md "${dst}/rules/" 2>/dev/null || true
+  fi
+}
+
 DROPPED_MOUNTS=0
 if [[ "${NORNIR_NET_MOUNTS:-}" == "1" ]]; then
   script="/usr/local/bin/mount-network-shares.sh"
@@ -56,6 +71,7 @@ _exec_workload() {
 }
 
 sync_home_scripts
+sync_agent_files
 
 if [[ $# -gt 0 ]]; then
   _exec_workload "$@"

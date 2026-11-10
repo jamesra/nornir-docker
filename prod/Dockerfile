@@ -139,6 +139,14 @@ RUN sed -i 's/\r$//' /usr/local/bin/mount-network-shares.sh \
        /usr/local/bin/drop-sys-admin-after-mounts.sh \
        /usr/local/bin/prod-entry.sh
 
+# Build-agent skills, rules and stos-scoring templates (deployed into ~/.claude by prod-entry.sh at container start).
+# host-scripts/ run on the host and are not needed in the image.
+COPY nornir-docker/agent/skills /opt/nornir/agent/skills
+COPY nornir-docker/agent/rules /opt/nornir/agent/rules
+COPY nornir-docker/agent/container-scripts /opt/nornir/agent/container-scripts
+RUN find /opt/nornir/agent -type f \( -name '*.sh' -o -name '*.py' \) -exec sed -i 's/\r$//' {} + \
+    && find /opt/nornir/agent -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} +
+
 # Interactive login welcome: nornir-build usage + ~/scripts entry wrappers.
 RUN printf '%s\n' \
     '' \
