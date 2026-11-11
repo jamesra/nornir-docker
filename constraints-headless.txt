@@ -1,5 +1,5 @@
 # Headless Nornir Docker dependencies.
-# Scientific stack uses minimum versions (aligned with nornir-pyre/requirements-qt.txt) so pip can
+# Scientific stack uses minimum versions so pip can
 # choose wheels for the active Python (e.g. 3.14) when exact pins lack cp314 wheels yet.
 # Pure-Python / stable pins below keep installs predictable.
 
