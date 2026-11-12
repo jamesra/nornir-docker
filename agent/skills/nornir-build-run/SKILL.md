@@ -21,7 +21,8 @@ Paths and commands below are srv's layout: `/srv/docker` is `$NORNIR_DOCKER_USER
 3. Check the stage list against CLAUDE.md rules 4 and 5, and the known-issues list (e.g. the translate
    regression: don't rebuild C++-built mosaics).
    - **Crushed and legacy sections can share a volume** (James, 2026-11-10): crushed tiles are in
-     `Quantized`, legacy tiles in `Raw8`. `TEMBuild` builds crushed sections and `TEMBuildLegacy` legacy ones
+     `Quantized`, legacy tiles in `Raw8`. `TEMBuild` (it runs `TEMBuildQuantized`) builds crushed sections and
+     `TEMBuildLegacy` legacy ones
      (James, 2026-11-12); each skips the other kind, and both leave a `Leveled` filter for TEMAlign (assembled images only in
      crushed sections). A volume crushed before 2026-11-10 holds its codes in `Raw8`: see rule 15 of the
      build-agent rules before importing into it.
